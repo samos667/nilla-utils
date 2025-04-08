@@ -1,6 +1,6 @@
 # nilla-utils
 
-Nilla modules and cli plugins to work with NixOS and home-manager configurations.
+[Nilla](https://github.com/nilla-nix/nilla) modules and cli plugins to work with NixOS and home-manager configurations.
 
 ## Quickstart
 
