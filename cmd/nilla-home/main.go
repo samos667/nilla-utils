@@ -17,6 +17,8 @@ import (
 
 var version = "unknown"
 
+var description = `[name]  Name of the home-manager system to build. If left empty it will try "$USER@<hostname>" and "$USER".`
+
 type subCmd int
 
 const (
@@ -37,16 +39,33 @@ func actionFuncFor(sub subCmd) cli.ActionFunc {
 }
 
 var app = &cli.Command{
-	Name:    "nilla-home",
-	Version: version,
-	Usage:   "A nilla cli plugin to work with home-manager configurations.",
+	Name:            "nilla-home",
+	Version:         version,
+	Usage:           "A nilla cli plugin to work with home-manager configurations.",
+	HideVersion:     true,
+	HideHelpCommand: true,
+	Flags: []cli.Flag{
+		&cli.BoolFlag{
+			Name:        "version",
+			Aliases:     []string{"V"},
+			Usage:       "Print version",
+			HideDefault: true,
+			Local:       true,
+		},
+		&cli.BoolFlag{
+			Name:        "verbose",
+			Aliases:     []string{"v"},
+			Usage:       "Set log level to verbose",
+			HideDefault: true,
+		},
+	},
 	Commands: []*cli.Command{
 		// Build
 		{
 			Name:        "build",
 			Usage:       "Build Home Manager configuration",
-			Description: "Build Home Manager configuration",
-			ArgsUsage:   "[configuration name]",
+			Description: fmt.Sprintf("Build Home Manager configuration.\n\n%s", description),
+			ArgsUsage:   "[name]",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
 					Name:  "no-link",
@@ -69,10 +88,39 @@ var app = &cli.Command{
 		{
 			Name:        "switch",
 			Usage:       "Build Home Manager configuration and activate it",
-			Description: "Build Home Manager configuration and activate it",
-			ArgsUsage:   "[system name]",
-			Action:      actionFuncFor(subCmdSwitch),
+			Description: fmt.Sprintf("Build Home Manager configuration and activate it.\n\n%s", description),
+			ArgsUsage:   "[name]",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:    "confirm",
+					Aliases: []string{"c"},
+					Usage:   "Do not ask for confirmation",
+				},
+			},
+			Action: actionFuncFor(subCmdSwitch),
 		},
+
+		// Generations
+		{
+			Name:        "generations",
+			Aliases:     []string{"gen"},
+			Description: "Work with home-manager generations",
+			Commands: []*cli.Command{
+				// List
+				{
+					Name:        "list",
+					Aliases:     []string{"ls"},
+					Description: "List home-manager generations",
+					Action:      listGenerations,
+				},
+			},
+		},
+	},
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		if cmd.Bool("version") {
+			cli.ShowVersion(cmd)
+		}
+		return nil
 	},
 }
 
@@ -117,7 +165,7 @@ func findHomeConfiguration(names []string) (string, error) {
 func findCurrentGeneration() (string, error) {
 	// Check in /nix/var/nix/profiles
 	if user := os.Getenv("USER"); user != "" {
-		perUser := fmt.Sprintf("/nix/car/nix/profiles/per-user/%s/home-manager", user)
+		perUser := fmt.Sprintf("/nix/var/nix/profiles/per-user/%s/home-manager", user)
 		if _, err := os.Stat(perUser); err == nil {
 			return perUser, nil
 		} else if !errors.Is(err, fs.ErrNotExist) {
@@ -201,6 +249,24 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 	diff.Stdout = os.Stderr
 	if err := diff.Run(); err != nil {
 		return err
+	}
+
+	// Build can exit now
+	if sc == subCmdBuild {
+		return nil
+	}
+
+	//
+	// Ask Confirmation
+	//
+	if !cmd.Bool("confirm") {
+		doContinue, err := tui.RunConfirm("Do you want to continue?")
+		if err != nil {
+			return err
+		}
+		if !doContinue {
+			return nil
+		}
 	}
 
 	//

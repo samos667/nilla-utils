@@ -14,6 +14,8 @@ import (
 
 var version = "unknown"
 
+var description = `[name]  Name of the NixOS system to build. If left empty it will use current hostname.`
+
 type subCmd int
 
 const (
@@ -33,16 +35,33 @@ func actionFuncFor(sub subCmd) cli.ActionFunc {
 }
 
 var app = &cli.Command{
-	Name:    "nilla-os",
-	Version: version,
-	Usage:   "A nilla cli plugin to work with NixOS configurations.",
+	Name:            "nilla-os",
+	Version:         version,
+	Usage:           "A nilla cli plugin to work with NixOS configurations.",
+	HideVersion:     true,
+	HideHelpCommand: true,
+	Flags: []cli.Flag{
+		&cli.BoolFlag{
+			Name:        "version",
+			Aliases:     []string{"V"},
+			Usage:       "Print version",
+			HideDefault: true,
+			Local:       true,
+		},
+		&cli.BoolFlag{
+			Name:        "verbose",
+			Aliases:     []string{"v"},
+			Usage:       "Set log level to verbose",
+			HideDefault: true,
+		},
+	},
 	Commands: []*cli.Command{
 		// Build
 		{
 			Name:        "build",
 			Usage:       "Build NixOS configuration",
-			Description: "Build NixOS configuration",
-			ArgsUsage:   "[system name]",
+			Description: fmt.Sprintf("Build NixOS configuration.\n\n%s", description),
+			ArgsUsage:   "[name]",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
 					Name:  "no-link",
@@ -65,28 +84,71 @@ var app = &cli.Command{
 		{
 			Name:        "test",
 			Usage:       "Build NixOS configuration and activate it",
-			Description: "Build NixOS configuration and activate it",
-			ArgsUsage:   "[system name]",
-			Action:      actionFuncFor(subCmdTest),
+			Description: fmt.Sprintf("Build NixOS configuration and activate it.\n\n%s", description),
+			ArgsUsage:   "[name]",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:    "confirm",
+					Aliases: []string{"c"},
+					Usage:   "Do not ask for confirmation",
+				},
+			},
+			Action: actionFuncFor(subCmdTest),
 		},
 
 		// Boot
 		{
 			Name:        "boot",
 			Usage:       "Build NixOS configuration and make it the boot default",
-			Description: "Build NixOS configuration and make it the boot default",
-			ArgsUsage:   "[system name]",
-			Action:      actionFuncFor(subCmdBoot),
+			Description: fmt.Sprintf("Build NixOS configuration and make it the boot default.\n\n%s", description),
+			ArgsUsage:   "[name]",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:    "confirm",
+					Aliases: []string{"c"},
+					Usage:   "Do not ask for confirmation",
+				},
+			},
+			Action: actionFuncFor(subCmdBoot),
 		},
 
 		// Switch
 		{
 			Name:        "switch",
 			Usage:       "Build NixOS configuration, activate it and make it the boot default",
-			Description: "Build NixOS configuration, activate it and make it the boot default",
-			ArgsUsage:   "[system name]",
-			Action:      actionFuncFor(subCmdSwitch),
+			Description: fmt.Sprintf("Build NixOS configuration, activate it and make it the boot default.\n\n%s", description),
+			ArgsUsage:   "[name]",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:    "confirm",
+					Aliases: []string{"c"},
+					Usage:   "Do not ask for confirmation",
+				},
+			},
+			Action: actionFuncFor(subCmdSwitch),
 		},
+
+		// Generations
+		{
+			Name:        "generations",
+			Aliases:     []string{"gen"},
+			Description: "Work with NixOS generations",
+			Commands: []*cli.Command{
+				// List
+				{
+					Name:        "list",
+					Aliases:     []string{"ls"},
+					Description: "List NixOS generations",
+					Action:      listGenerations,
+				},
+			},
+		},
+	},
+	Action: func(ctx context.Context, cmd *cli.Command) error {
+		if cmd.Bool("version") {
+			cli.ShowVersion(cmd)
+		}
+		return nil
 	},
 }
 
@@ -157,6 +219,24 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 	diff.Stdout = os.Stderr
 	if err := diff.Run(); err != nil {
 		return err
+	}
+
+	// Build can exit now
+	if sc == subCmdBuild {
+		return nil
+	}
+
+	//
+	// Ask Confirmation
+	//
+	if !cmd.Bool("confirm") {
+		doContinue, err := tui.RunConfirm("Do you want to continue?")
+		if err != nil {
+			return err
+		}
+		if !doContinue {
+			return nil
+		}
 	}
 
 	//

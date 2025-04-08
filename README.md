@@ -2,6 +2,14 @@
 
 [Nilla](https://github.com/nilla-nix/nilla) modules and cli plugins to work with NixOS and home-manager configurations.
 
+# Table of contents
+
+- [Quickstart](#quickstart)
+- [Inputs generator](#inputs-generator)
+- [NixOS](#nixos)
+- [Home Manager](#home-manager)
+- [Nilla cli plugins](#nilla-cli-plugins)
+
 ## Quickstart
 
 Provided you're using `npins` with your nilla configuration, add nilla-utils.
