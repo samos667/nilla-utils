@@ -9,6 +9,12 @@
 - [Home Manager](#home-manager)
 - [Nilla cli plugins](#nilla-cli-plugins)
 - [Generators](#generators)
+  - [Inputs](#inputs)
+  - [Packages](#packages)
+  - [Shells](#shells)
+  - [Overlays](#overlays)
+  - [NixOS](#nixos-2)
+  - [Home Manager](#home-manager-2)
 
 ## Quickstart
 
