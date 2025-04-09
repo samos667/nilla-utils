@@ -99,7 +99,7 @@ in {
         description = "The username to use for all discovered home-manager hosts.";
       };
       folder = lib.options.create {
-        type = lib.types.path;
+        type = lib.types.nullish lib.types.path;
         description = "The folder to auto discover home-manager hosts.";
         default.value = null;
       };

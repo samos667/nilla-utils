@@ -1,7 +1,7 @@
 let
-  src = import ./npins;
+  pins = import ./npins;
 
-  nilla = import src.nilla;
+  nilla = import pins.nilla;
 
   systems = ["x86_64-linux" "aarch64-linux"];
 in
@@ -9,10 +9,10 @@ in
     config = {
       inputs = {
         nixpkgs = {
-          src = src.nixpkgs;
+          src = pins.nixpkgs;
 
           settings.overlays = [
-            (import "${src.gomod2nix}/overlay.nix")
+            (import "${pins.gomod2nix}/overlay.nix")
           ];
         };
       };

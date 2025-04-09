@@ -5,10 +5,10 @@
 # Table of contents
 
 - [Quickstart](#quickstart)
-- [Inputs generator](#inputs-generator)
 - [NixOS](#nixos)
 - [Home Manager](#home-manager)
 - [Nilla cli plugins](#nilla-cli-plugins)
+- [Generators](#generators)
 
 ## Quickstart
 
@@ -18,7 +18,7 @@ Provided you're using `npins` with your nilla configuration, add nilla-utils.
 npins add github -b main arnarg nilla-utils
 ```
 
-Add import the modules to your nilla configuration.
+And import the modules to your nilla configuration.
 
 ```nix
 # nilla.nix
@@ -33,41 +33,6 @@ in nilla.create ({config}: {
 
   config = {
     inputs.nilla-utils.src = pins.nilla-utils;
-
-    # ...
-  };
-})
-```
-
-## Inputs generator
-
-nilla-utils provides an inputs generator that will generate `config.inputs.*` from you npins.
-
-```nix
-# nilla.nix
-let
-  pins = import ./npins;
-
-  nilla = import pins.nilla;
-in nilla.create ({config}: {
-  includes = [
-    "${pins.nilla-utils}/modules"
-  ];
-
-  config = {
-    # Load all pins from npins and generate nilla inputs.
-    generators.inputs.pins = pins;
-
-    # Individual inputs can be overwritten in the standard inputs.
-    inputs = {
-      # Set nixpkgs config
-      nixpkgs.settings.configuration = {
-        allowUnfree = true;
-      };
-
-      # Set nilla loader for nilla-utils (although redundant).
-      nilla-utils.loader = "nilla";
-    };
 
     # ...
   };
@@ -113,7 +78,195 @@ in nilla.create ({config}: {
 })
 ```
 
-The NixOS module also adds a generator that will generate NixOS systems from a directory with sub-directories of hosts containing a `configuration.nix` file.
+## Home Manager
+
+The Home Manager module adds support for Home Manager systems under `systems.home`.
+
+```nix
+# nilla.nix
+let
+  pins = import ./npins;
+
+  nilla = import pins.nilla;
+in nilla.create ({config}: {
+  includes = [
+    "${pins.nilla-utils}/modules"
+  ];
+
+  config = {
+    systems.home."user@system1" = {
+      # Pass args to home-manager modules.
+      args.inputs = config.inputs;
+
+      modules = [
+        {
+          home.username = "user";
+          home.homeDirectory = "/home/user";
+
+          # ...
+        }
+      ];
+    };
+
+    # ...
+  };
+})
+```
+
+## Nilla cli plugins
+
+nilla-utils provides plugins for nilla cli for sub-commands `nilla os` and `nilla home` that can be used to build and switch to NixOS and home-manager systems.
+
+To install the plugins the following can be added to your NixOS or home-manager modules (provided that `args.inputs = config.inputs;` from the examples above are added).
+
+### NixOS
+
+```nix
+{inputs, ...}: {
+  environment.systemPackages = [
+    # Added with `npins add --name nilla-cli github -b main nilla-nix cli`
+    inputs.nilla-cli.packages.default.result.x86_64-linux
+    inputs.nilla-utils.packages.default.result.x86_64-linux
+  ];
+}
+```
+
+### Home Manager
+
+```nix
+{inputs, ...}: {
+  home.packages = [
+    # Added with `npins add --name nilla-cli github -b main nilla-nix cli`
+    inputs.nilla-cli.packages.default.result.x86_64-linux
+    inputs.nilla-utils.packages.default.result.x86_64-linux
+  ];
+}
+```
+
+## Generators
+
+nilla-utils modules add various generators that can be used to generate inputs and systems from various sources.
+
+### Inputs
+
+The inputs generator will generate `config.inputs.*` from you npins.
+
+```nix
+# nilla.nix
+let
+  pins = import ./npins;
+
+  nilla = import pins.nilla;
+in nilla.create ({config}: {
+  includes = [
+    "${pins.nilla-utils}/modules"
+  ];
+
+  config = {
+    # Load all pins from npins and generate nilla inputs.
+    generators.inputs.pins = pins;
+
+    # Individual inputs can be overwritten in the standard inputs.
+    inputs = {
+      # Set nixpkgs config
+      nixpkgs.settings.configuration = {
+        allowUnfree = true;
+      };
+
+      # Set nilla loader for nilla-utils (although redundant).
+      nilla-utils.loader = "nilla";
+    };
+
+    # ...
+  };
+})
+```
+
+### Packages
+
+The packages generator will generate `config.packages.*` from folders containing a `default.nix` from a specified folder.
+
+```nix
+# nilla.nix
+let
+  pins = import ./npins;
+
+  nilla = import pins.nilla;
+in nilla.create ({config}: {
+  includes = [
+    "${pins.nilla-utils}/modules"
+  ];
+
+  config = {
+    # Generate packages from sub-folders in `./packages`.
+    generators.packages.folder = ./packages;
+
+    # ...
+  };
+})
+```
+
+Now `nilla build mypackage` will build the package in `./packages/mypackage/default.nix`.
+
+
+### Shells
+
+The shells generator will generate `config.shells.*` from folders containing a `default.nix` from a specified folder.
+
+```nix
+# nilla.nix
+let
+  pins = import ./npins;
+
+  nilla = import pins.nilla;
+in nilla.create ({config}: {
+  includes = [
+    "${pins.nilla-utils}/modules"
+  ];
+
+  config = {
+    # Generate shells from sub-folders in `./shells`.
+    generators.shells.folder = ./shells;
+
+    # ...
+  };
+})
+```
+
+Now `nilla shell myshell` will enter the shell in `./shells/myshell/default.nix`.
+
+### Overlays
+
+The overlays generator will generate `config.overlays.*` from folders containing a `default.nix` from a specified folder.
+
+```nix
+# nilla.nix
+let
+  pins = import ./npins;
+
+  nilla = import pins.nilla;
+in nilla.create ({config}: {
+  includes = [
+    "${pins.nilla-utils}/modules"
+  ];
+
+  config = {
+    # Generate overlay `default` with packages in `./packages`.
+    generators.overlays.default.folder = ./packages;
+
+    # Use the generated overlay
+    inputs.nixpkgs.setting.overlays = [config.overlays.default];
+
+    # ...
+  };
+})
+```
+
+Now `config.overlays.default` set to an overlay adding all the packages found in `./packages/*/default.nix`.
+
+### NixOS
+
+The NixOS generator will generate NixOS systems from a directory with sub-directories of hosts containing a `configuration.nix` file.
 
 Given the following structure:
 
@@ -169,42 +322,9 @@ in nilla.create ({config}: {
 })
 ```
 
-## Home Manager
+### Home Manager
 
-The Home Manager module adds support for Home Manager systems under `systems.home`.
-
-```nix
-# nilla.nix
-let
-  pins = import ./npins;
-
-  nilla = import pins.nilla;
-in nilla.create ({config}: {
-  includes = [
-    "${pins.nilla-utils}/modules"
-  ];
-
-  config = {
-    systems.home."user@system1" = {
-      # Pass args to home-manager modules.
-      args.inputs = config.inputs;
-
-      modules = [
-        {
-          home.username = "user";
-          home.homeDirectory = "/home/user";
-
-          # ...
-        }
-      ];
-    };
-
-    # ...
-  };
-})
-```
-
-The Home Manager module also adds a generator that will generate Home Manager systems from a directory with sub-directories of hosts containing a `home.nix` file.
+The Home Manager generator will generate Home Manager systems from a directory with sub-directories of hosts containing a `home.nix` file.
 
 Given the following structure:
 
@@ -260,34 +380,4 @@ in nilla.create ({config}: {
     # ...
   };
 })
-```
-
-## Nilla cli plugins
-
-nilla-utils provides plugins for nilla cli for sub-commands `nilla os` and `nilla home` that can be used to build and switch to NixOS and home-manager systems.
-
-To install the plugins the following can be added to your NixOS or home-manager modules (provided that `args.inputs = config.inputs;` from the examples above are added).
-
-### NixOS
-
-```nix
-{inputs, ...}: {
-  environment.systemPackages = [
-    # Added with `npins add --name nilla-cli github -b main nilla-nix cli`
-    inputs.nilla-cli.packages.default.result.x86_64-linux
-    inputs.nilla-utils.packages.default.result.x86_64-linux
-  ];
-}
-```
-
-### Home Manager
-
-```nix
-{inputs, ...}: {
-  home.packages = [
-    # Added with `npins add --name nilla-cli github -b main nilla-nix cli`
-    inputs.nilla-cli.packages.default.result.x86_64-linux
-    inputs.nilla-utils.packages.default.result.x86_64-linux
-  ];
-}
 ```

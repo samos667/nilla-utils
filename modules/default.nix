@@ -4,5 +4,7 @@
     ./nixos.nix
     ./home.nix
     ./overlay.nix
+    ./packages.nix
+    ./shells.nix
   ];
 }
