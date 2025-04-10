@@ -7,6 +7,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.4
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/kevinburke/ssh_config v1.2.0
+	github.com/skeema/knownhosts v1.3.1
 	github.com/urfave/cli/v3 v3.1.1
 	github.com/valyala/fastjson v1.6.4
 	golang.org/x/crypto v0.37.0

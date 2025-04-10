@@ -11,11 +11,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/arnarg/nilla-utils/internal/util"
 	"github.com/kevinburke/ssh_config"
+	"github.com/skeema/knownhosts"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
-	"golang.org/x/crypto/ssh/knownhosts"
-	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/term"
 )
 
@@ -116,15 +116,15 @@ func (c *sshCommand) Start() error {
 		// Request pseudo terminal
 		if f, ok := c.sess.Stdin.(*os.File); ok {
 			fileDescriptor := int(f.Fd())
-			if terminal.IsTerminal(fileDescriptor) {
-				state, err := terminal.MakeRaw(fileDescriptor)
+			if term.IsTerminal(fileDescriptor) {
+				state, err := term.MakeRaw(fileDescriptor)
 				if err != nil {
 					return err
 				}
 				c.state = state
 				c.fd = fileDescriptor
 
-				termWidth, termHeight, err := terminal.GetSize(fileDescriptor)
+				termWidth, termHeight, err := term.GetSize(fileDescriptor)
 				if err != nil {
 					return err
 				}
@@ -145,7 +145,7 @@ func (c *sshCommand) Wait() error {
 	defer c.sess.Close()
 	defer func() {
 		if c.state != nil {
-			terminal.Restore(c.fd, c.state)
+			term.Restore(c.fd, c.state)
 			c.state = nil
 		}
 	}()
@@ -221,7 +221,7 @@ func configFromTarget(target string) (string, *ssh.ClientConfig, error) {
 	}
 
 	// Build config from host
-	config, err := buildDefaultConfig(host)
+	config, err := buildDefaultConfig(host, port)
 	if err != nil {
 		return "", nil, err
 	}
@@ -229,6 +229,11 @@ func configFromTarget(target string) (string, *ssh.ClientConfig, error) {
 	// Override if specified
 	if user != "" {
 		config.User = user
+	}
+
+	// If user is still unset, we use current user
+	if config.User == "" {
+		config.User = util.GetUser()
 	}
 
 	// Add password callback
@@ -249,11 +254,9 @@ func configFromTarget(target string) (string, *ssh.ClientConfig, error) {
 	return fmt.Sprintf("%s:%s", host, port), config, nil
 }
 
-func buildDefaultConfig(host string) (*ssh.ClientConfig, error) {
+func buildDefaultConfig(host, port string) (*ssh.ClientConfig, error) {
 	// SSH config file parser
 	settings := ssh_config.DefaultUserSettings
-
-	// Figure out port
 
 	// Initial config
 	conf := &ssh.ClientConfig{
@@ -282,15 +285,36 @@ func buildDefaultConfig(host string) (*ssh.ClientConfig, error) {
 	)
 
 	// Get known hosts file
-	knownHostsFile := settings.Get(host, "UserKnownHostsFile")
-	if knownHostsFile == "" {
-		knownHostsFile = defaultKnownHosts
-	}
-	if khcb, err := knownhosts.New(resolvePath(knownHostsFile)); err == nil {
-		conf.HostKeyCallback = khcb
+	kh, err := knownhosts.New(
+		getKnownHostsFiles(settings, host)...,
+	)
+	if err == nil {
+		conf.HostKeyCallback = kh.HostKeyCallback()
+		conf.HostKeyAlgorithms = kh.HostKeyAlgorithms(fmt.Sprintf("%s:%s", host, port))
+	} else {
+		return nil, err
 	}
 
 	return conf, nil
+}
+
+func getKnownHostsFiles(settings *ssh_config.UserSettings, host string) []string {
+
+	if f, err := settings.GetStrict(host, "UserKnownHostsFile"); err == nil {
+		files := []string{}
+
+		for _, khf := range strings.Split(f, " ") {
+			resolved := resolvePath(khf)
+
+			if _, err := os.Stat(resolved); err == nil {
+				files = append(files, resolved)
+			}
+		}
+
+		return files
+	}
+
+	return []string{resolvePath(defaultKnownHosts)}
 }
 
 func resolvePath(p string) string {

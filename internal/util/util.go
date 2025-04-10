@@ -1,5 +1,10 @@
 package util
 
+import (
+	"os"
+	"os/user"
+)
+
 const (
 	_ = 1 << (10 * iota)
 	KiB
@@ -42,4 +47,11 @@ func ConvertBytesToUnit(b int64, unit string) float64 {
 	default:
 		return float64(b)
 	}
+}
+
+func GetUser() string {
+	if user, err := user.Current(); err == nil {
+		return user.Username
+	}
+	return os.Getenv("USER")
 }
