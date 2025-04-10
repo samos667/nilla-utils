@@ -285,7 +285,6 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 		_, err := nix.Command("copy").
 			Args([]string{
 				"--to", fmt.Sprintf("ssh://%s", cmd.String("target")),
-				"--substitute-on-destination",
 				string(out),
 			}).
 			Executor(builder).
