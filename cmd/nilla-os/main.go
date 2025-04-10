@@ -324,23 +324,26 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 	// Set NixOS configuration in bootloader
 	//
 	if sc == subCmdBoot || sc == subCmdSwitch {
+		fmt.Fprintln(os.Stderr)
+		printSection("Adding configuration to bootloader")
+
 		// Set profile
-		_, err := nix.Command("build").
-			Args([]string{
-				"--no-link",
-				"--profile", SYSTEM_PROFILE,
-				string(out),
-			}).
-			Executor(target).
-			Stdin(os.Stdin).
-			Privileged(true).
-			Run(context.Background())
+		buildc, err := target.Command(
+			"sudo", "nix", "build",
+			"--no-link", "--profile", SYSTEM_PROFILE,
+			"--extra-experimental-features", "nix-command",
+			string(out),
+		)
 		if err != nil {
 			return err
 		}
 
-		fmt.Fprintln(os.Stderr)
-		printSection("Adding configuration to bootloader")
+		buildc.SetStdin(os.Stdin)
+		buildc.SetStderr(os.Stderr)
+		buildc.SetStdout(os.Stdout)
+		if err := buildc.Run(); err != nil {
+			return err
+		}
 
 		// Run switch_to_configuration
 		switchp := fmt.Sprintf("%s/bin/switch-to-configuration", out)

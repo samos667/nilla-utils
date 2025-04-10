@@ -4,7 +4,7 @@
   nvd,
   makeWrapper,
 }: let
-  version = "0.0.0-alpha.3";
+  version = "0.0.0-alpha.4";
 in
   buildGoApplication {
     inherit version;
