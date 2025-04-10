@@ -239,8 +239,6 @@ func (m copyModel) progressView() string {
 		strb.WriteString(
 			fmt.Sprintf("%s%s\n", m.spinner.View(), msg),
 		)
-	} else {
-		strb.WriteString("\n")
 	}
 
 	transfers := fmtTransfers(m)

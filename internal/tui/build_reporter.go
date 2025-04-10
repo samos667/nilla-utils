@@ -315,8 +315,6 @@ func (m buildModel) progressView() string {
 	} else {
 		if m.lastMsg != "" {
 			strb.WriteString(fmt.Sprintf("%s%s\n", m.spinner.View(), m.lastMsg))
-		} else {
-			strb.WriteString("\n")
 		}
 	}
 
