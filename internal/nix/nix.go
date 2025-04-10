@@ -79,8 +79,11 @@ func (c NixCommand) Run(ctx context.Context) ([]byte, error) {
 	}
 
 	// Append rest of arguments
-	args = append(args, c.cmd, "--extra-experimental-features", "nix-command", "--print-out-paths")
+	args = append(args, c.cmd, "--extra-experimental-features", "nix-command")
 	args = append(args, c.args...)
+	if c.cmd == "build" {
+		args = append(args, "--print-out-paths")
+	}
 
 	if c.reporter != nil {
 		return c.runWithReporter(ctx, cmd, args)
