@@ -3,15 +3,18 @@ package nix
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
-	"os/exec"
+	gexec "os/exec"
 	"os/signal"
 	"syscall"
+
+	"github.com/arnarg/nilla-utils/internal/exec"
 )
 
 // CurrentSystem returns `builtins.currentSystem` from `nix eval`.
 func CurrentSystem() (string, error) {
-	sys, err := exec.Command(
+	sys, err := gexec.Command(
 		"nix", "eval",
 		"--expr", "builtins.currentSystem", "--raw", "--impure",
 	).Output()
@@ -23,8 +26,10 @@ func CurrentSystem() (string, error) {
 }
 
 type NixCommand struct {
-	cmd  string
-	args []string
+	cmd   string
+	args  []string
+	exec  exec.Executor
+	stdin io.Reader
 
 	privileged bool
 
@@ -33,12 +38,23 @@ type NixCommand struct {
 
 func Command(cmd string) NixCommand {
 	return NixCommand{
-		cmd: cmd,
+		cmd:  cmd,
+		exec: exec.NewLocalExecutor(),
 	}
 }
 
 func (c NixCommand) Args(args []string) NixCommand {
 	c.args = args
+	return c
+}
+
+func (c NixCommand) Executor(executor exec.Executor) NixCommand {
+	c.exec = executor
+	return c
+}
+
+func (c NixCommand) Stdin(r io.Reader) NixCommand {
+	c.stdin = r
 	return c
 }
 
@@ -63,7 +79,7 @@ func (c NixCommand) Run(ctx context.Context) ([]byte, error) {
 	}
 
 	// Append rest of arguments
-	args = append(args, c.cmd, "--print-out-paths")
+	args = append(args, c.cmd, "--extra-experimental-features", "nix-command", "--print-out-paths")
 	args = append(args, c.args...)
 
 	if c.reporter != nil {
@@ -75,14 +91,22 @@ func (c NixCommand) Run(ctx context.Context) ([]byte, error) {
 
 func (c NixCommand) runStdout(ctx context.Context, cmd string, args []string) ([]byte, error) {
 	// Create nix command
-	nixc := exec.CommandContext(ctx, cmd, args...)
+	nixc, err := c.exec.CommandContext(ctx, cmd, args...)
+	if err != nil {
+		return nil, err
+	}
 
 	// Create a buffer to capture nix's stdout
 	b := &bytes.Buffer{}
 
 	// Plug stdout and stderr
-	nixc.Stdout = b
-	nixc.Stderr = os.Stderr
+	nixc.SetStdout(b)
+	nixc.SetStderr(os.Stderr)
+
+	// Plug stdin if provided
+	if c.stdin != nil {
+		nixc.SetStdin(c.stdin)
+	}
 
 	// Run nix command
 	if err := nixc.Run(); err != nil {
@@ -102,16 +126,24 @@ func (c NixCommand) runWithReporter(ctx context.Context, cmd string, args []stri
 	args = append(args, "--log-format", "internal-json", "-v")
 
 	// Create nix command
-	nixc := exec.CommandContext(sctx, cmd, args...)
+	nixc, err := c.exec.CommandContext(sctx, cmd, args...)
+	if err != nil {
+		return
+	}
 
 	// Create a buffer to capture nix's stdout
 	b := &bytes.Buffer{}
-	nixc.Stdout = b
+	nixc.SetStdout(b)
 
 	// Get stderr pipe from nix command
 	stderr, err := nixc.StderrPipe()
 	if err != nil {
 		return
+	}
+
+	// Plug stdin if provided
+	if c.stdin != nil {
+		nixc.SetStdin(c.stdin)
 	}
 
 	// Start nix command

@@ -3,10 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
-	"os/exec"
 
+	"github.com/arnarg/nilla-utils/internal/exec"
 	"github.com/arnarg/nilla-utils/internal/nix"
 	"github.com/arnarg/nilla-utils/internal/tui"
 	"github.com/urfave/cli/v3"
@@ -92,6 +91,11 @@ var app = &cli.Command{
 					Aliases: []string{"c"},
 					Usage:   "Do not ask for confirmation",
 				},
+				&cli.StringFlag{
+					Name:    "target",
+					Aliases: []string{"t"},
+					Usage:   "Target host to update",
+				},
 			},
 			Action: actionFuncFor(subCmdTest),
 		},
@@ -108,6 +112,11 @@ var app = &cli.Command{
 					Aliases: []string{"c"},
 					Usage:   "Do not ask for confirmation",
 				},
+				&cli.StringFlag{
+					Name:    "target",
+					Aliases: []string{"t"},
+					Usage:   "Target host to update",
+				},
 			},
 			Action: actionFuncFor(subCmdBoot),
 		},
@@ -123,6 +132,11 @@ var app = &cli.Command{
 					Name:    "confirm",
 					Aliases: []string{"c"},
 					Usage:   "Do not ask for confirmation",
+				},
+				&cli.StringFlag{
+					Name:    "target",
+					Aliases: []string{"t"},
+					Usage:   "Target host to update",
 				},
 			},
 			Action: actionFuncFor(subCmdSwitch),
@@ -168,6 +182,11 @@ func inferName(name string) (string, error) {
 }
 
 func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
+	var builder, target exec.Executor
+
+	// Setup builder, which is always local
+	builder = exec.NewLocalExecutor()
+
 	// Try to infer name of the NixOS system
 	name, err := inferName(cmd.Args().First())
 	if err != nil {
@@ -201,6 +220,7 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 	printSection("Building configuration")
 	out, err := nix.Command("build").
 		Args(nargs).
+		Executor(builder).
 		Reporter(tui.NewBuildReporter(cmd.Bool("verbose"))).
 		Run(ctx)
 	if err != nil {
@@ -208,17 +228,32 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 	}
 
 	//
+	// Setup target executor
+	//
+	if cmd.String("target") != "" {
+		target, err = exec.NewSSHExecutor(cmd.String("target"))
+		if err != nil {
+			return err
+		}
+	} else {
+		target = builder
+	}
+
+	//
 	// Run generation diff using nvd
 	//
-	fmt.Fprintln(os.Stderr)
-	printSection("Comparing changes")
+	// TODO: support with --target
+	if cmd.String("target") == "" {
+		fmt.Fprintln(os.Stderr)
+		printSection("Comparing changes")
 
-	// Run nvd diff
-	diff := exec.Command("nvd", "diff", CURRENT_PROFILE, string(out))
-	diff.Stderr = os.Stderr
-	diff.Stdout = os.Stderr
-	if err := diff.Run(); err != nil {
-		return err
+		// Run nvd diff
+		diff, _ := builder.Command("nvd", "diff", CURRENT_PROFILE, string(out))
+		diff.SetStderr(os.Stderr)
+		diff.SetStdout(os.Stderr)
+		if err := diff.Run(); err != nil {
+			return err
+		}
 	}
 
 	// Build can exit now
@@ -240,6 +275,28 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 	}
 
 	//
+	// Copy closure to target
+	//
+	if cmd.String("target") != "" {
+		fmt.Fprintln(os.Stderr)
+		printSection("Copying system to target")
+
+		// Copy system closure
+		_, err := nix.Command("copy").
+			Args([]string{
+				"--to", fmt.Sprintf("ssh://%s", cmd.String("target")),
+				"--substitute-on-destination",
+				string(out),
+			}).
+			Executor(builder).
+			Reporter(tui.NewCopyReporter(cmd.Bool("verbose"))).
+			Run(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	//
 	// Activate NixOS configuration
 	//
 	if sc == subCmdTest || sc == subCmdSwitch {
@@ -248,9 +305,14 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 
 		// Run switch_to_configuration
 		switchp := fmt.Sprintf("%s/bin/switch-to-configuration", out)
-		switchc := exec.Command("sudo", switchp, "test")
-		switchc.Stderr = os.Stderr
-		switchc.Stdout = os.Stdout
+		switchc, err := target.Command("sudo", switchp, "test")
+		if err != nil {
+			return err
+		}
+
+		switchc.SetStdin(os.Stdin)
+		switchc.SetStderr(os.Stderr)
+		switchc.SetStdout(os.Stdout)
 
 		// This error should be ignored during switch so that
 		// it can continue onto setting up the bootloader below
@@ -270,6 +332,8 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 				"--profile", SYSTEM_PROFILE,
 				string(out),
 			}).
+			Executor(target).
+			Stdin(os.Stdin).
 			Privileged(true).
 			Run(context.Background())
 		if err != nil {
@@ -281,9 +345,14 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 
 		// Run switch_to_configuration
 		switchp := fmt.Sprintf("%s/bin/switch-to-configuration", out)
-		switchc := exec.Command("sudo", switchp, "boot")
-		switchc.Stderr = os.Stderr
-		switchc.Stdout = os.Stdout
+		switchc, err := target.Command("sudo", switchp, "boot")
+		if err != nil {
+			return err
+		}
+
+		switchc.SetStdin(os.Stdin)
+		switchc.SetStderr(os.Stderr)
+		switchc.SetStdout(os.Stdout)
 
 		return switchc.Run()
 	}
@@ -293,6 +362,7 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 
 func main() {
 	if err := app.Run(context.Background(), os.Args); err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 }
