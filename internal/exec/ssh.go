@@ -93,6 +93,7 @@ func (c *sshCommand) StderrPipe() (io.Reader, error) {
 }
 
 func (c *sshCommand) Run() error {
+	defer c.cleanup()
 	if err := c.Start(); err != nil {
 		return err
 	}
@@ -143,12 +144,7 @@ func (c *sshCommand) Start() error {
 
 func (c *sshCommand) Wait() error {
 	defer c.sess.Close()
-	defer func() {
-		if c.state != nil {
-			term.Restore(c.fd, c.state)
-			c.state = nil
-		}
-	}()
+	defer c.cleanup()
 
 	var wg sync.WaitGroup
 
@@ -181,6 +177,13 @@ func (c *sshCommand) Wait() error {
 	wg.Wait()
 
 	return err
+}
+
+func (c *sshCommand) cleanup() {
+	if c.state != nil {
+		term.Restore(c.fd, c.state)
+		c.state = nil
+	}
 }
 
 func parseTarget(target string) (user string, host string, port string) {
@@ -319,14 +322,14 @@ func getKnownHostsFiles(settings *ssh_config.UserSettings, host string) []string
 
 func resolvePath(p string) string {
 	if strings.HasPrefix(p, "~/") {
-		p = filepath.Join(os.Getenv("HOME"), p[2:])
+		p = filepath.Join(util.GetHomeDir(), p[2:])
 	}
 
 	return os.ExpandEnv(p)
 }
 
 func configPath(p string) string {
-	return fmt.Sprintf("%s/.ssh/%s", os.Getenv("HOME"), p)
+	return fmt.Sprintf("%s/.ssh/%s", util.GetHomeDir(), p)
 }
 
 func getIdentityFiles(settings *ssh_config.UserSettings, host string) []string {

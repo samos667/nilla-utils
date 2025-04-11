@@ -2,7 +2,10 @@ package util
 
 import (
 	"os"
+	"os/exec"
 	"os/user"
+	"strconv"
+	"syscall"
 )
 
 const (
@@ -54,4 +57,36 @@ func GetUser() string {
 		return user.Username
 	}
 	return os.Getenv("USER")
+}
+
+func GetHomeDir() string {
+	if user, err := user.Current(); err == nil && user.HomeDir != "" {
+		return user.HomeDir
+	}
+	return os.Getenv("HOME")
+}
+
+func IsRoot() bool {
+	user, err := user.Current()
+	if err != nil {
+		return false
+	}
+
+	uid, err := strconv.Atoi(user.Uid)
+	if err != nil {
+		return false
+	}
+
+	return uid == 0
+}
+
+func SelfElevate() error {
+	args := append([]string{"sudo"}, os.Args...)
+
+	spath, err := exec.LookPath("sudo")
+	if err != nil {
+		return err
+	}
+
+	return syscall.Exec(spath, args, os.Environ())
 }

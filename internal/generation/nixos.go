@@ -54,6 +54,8 @@ type NixOSGeneration struct {
 	BuildDate     time.Time
 	Version       string
 	KernelVersion string
+
+	path string
 }
 
 func NewNixOSGeneration(root string, info fs.FileInfo) (*NixOSGeneration, error) {
@@ -67,14 +69,17 @@ func NewNixOSGeneration(root string, info fs.FileInfo) (*NixOSGeneration, error)
 		return nil, err
 	}
 
+	// Build full path
+	path := fmt.Sprintf("%s/%s", root, info.Name())
+
 	// Read NixOS version
-	nixosVer, err := os.ReadFile(fmt.Sprintf("%s/%s/nixos-version", root, info.Name()))
+	nixosVer, err := os.ReadFile(fmt.Sprintf("%s/nixos-version", path))
 	if err != nil {
 		return nil, err
 	}
 
 	// Get kernel version
-	kernelVer, err := getKernelVersion(fmt.Sprintf("%s/%s", root, info.Name()))
+	kernelVer, err := getKernelVersion(path)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +89,18 @@ func NewNixOSGeneration(root string, info fs.FileInfo) (*NixOSGeneration, error)
 		BuildDate:     info.ModTime(),
 		Version:       string(nixosVer),
 		KernelVersion: kernelVer,
+		path:          path,
 	}, nil
+}
+
+func (g *NixOSGeneration) Delete() error {
+	if err := os.Remove(g.path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func getKernelVersion(system string) (string, error) {

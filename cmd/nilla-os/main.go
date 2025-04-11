@@ -146,19 +146,46 @@ var app = &cli.Command{
 		{
 			Name:        "generations",
 			Aliases:     []string{"gen"},
+			Usage:       "Work with NixOS generations",
 			Description: "Work with NixOS generations",
 			Commands: []*cli.Command{
 				// List
 				{
 					Name:        "list",
 					Aliases:     []string{"ls"},
+					Usage:       "List NixOS generations",
 					Description: "List NixOS generations",
 					Action:      listGenerations,
+				},
+
+				// Clean
+				{
+					Name:        "clean",
+					Aliases:     []string{"c"},
+					Usage:       "Delete and garbage collect NixOS generations",
+					Description: "Delete and garbage collect NixOS generations",
+					Flags: []cli.Flag{
+						&cli.UintFlag{
+							Name:    "keep",
+							Aliases: []string{"k"},
+							Usage:   "Number of generations to keep",
+							Value:   1,
+						},
+						&cli.BoolFlag{
+							Name:    "confirm",
+							Aliases: []string{"c"},
+							Usage:   "Do not ask for confirmation",
+						},
+					},
+					Action: cleanGenerations,
 				},
 			},
 		},
 	},
 	Action: func(ctx context.Context, cmd *cli.Command) error {
+		if cmd.Args().Len() < 1 {
+			cli.ShowAppHelp(cmd)
+		}
 		if cmd.Bool("version") {
 			cli.ShowVersion(cmd)
 		}

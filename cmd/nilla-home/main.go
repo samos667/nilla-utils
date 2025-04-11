@@ -11,6 +11,7 @@ import (
 
 	"github.com/arnarg/nilla-utils/internal/nix"
 	"github.com/arnarg/nilla-utils/internal/tui"
+	"github.com/arnarg/nilla-utils/internal/util"
 	"github.com/urfave/cli/v3"
 )
 
@@ -103,19 +104,46 @@ var app = &cli.Command{
 		{
 			Name:        "generations",
 			Aliases:     []string{"gen"},
+			Usage:       "Work with home-manager generations",
 			Description: "Work with home-manager generations",
 			Commands: []*cli.Command{
 				// List
 				{
 					Name:        "list",
 					Aliases:     []string{"ls"},
+					Usage:       "List home-manager generations",
 					Description: "List home-manager generations",
 					Action:      listGenerations,
+				},
+
+				// Clean
+				{
+					Name:        "clean",
+					Aliases:     []string{"c"},
+					Usage:       "Delete and garbage collect NixOS generations",
+					Description: "Delete and garbage collect NixOS generations",
+					Flags: []cli.Flag{
+						&cli.UintFlag{
+							Name:    "keep",
+							Aliases: []string{"k"},
+							Usage:   "Number of generations to keep",
+							Value:   1,
+						},
+						&cli.BoolFlag{
+							Name:    "confirm",
+							Aliases: []string{"c"},
+							Usage:   "Do not ask for confirmation",
+						},
+					},
+					Action: cleanGenerations,
 				},
 			},
 		},
 	},
 	Action: func(ctx context.Context, cmd *cli.Command) error {
+		if cmd.Args().Len() < 1 {
+			cli.ShowAppHelp(cmd)
+		}
 		if cmd.Bool("version") {
 			cli.ShowVersion(cmd)
 		}
@@ -131,7 +159,7 @@ func inferNames(name string) ([]string, error) {
 	if name == "" {
 		names := []string{}
 
-		user := os.Getenv("USER")
+		user := util.GetUser()
 		if user == "" {
 			return nil, errNoUserFound
 		}
@@ -163,7 +191,7 @@ func findHomeConfiguration(names []string) (string, error) {
 
 func findCurrentGeneration() (string, error) {
 	// Check in /nix/var/nix/profiles
-	if user := os.Getenv("USER"); user != "" {
+	if user := util.GetUser(); user != "" {
 		perUser := fmt.Sprintf("/nix/var/nix/profiles/per-user/%s/home-manager", user)
 		if _, err := os.Stat(perUser); err == nil {
 			return perUser, nil
@@ -173,7 +201,7 @@ func findCurrentGeneration() (string, error) {
 	}
 
 	// Check ~/.local/state/nix/profiles
-	if home := os.Getenv("HOME"); home != "" {
+	if home := util.GetHomeDir(); home != "" {
 		homeProfile := fmt.Sprintf("%s/.local/state/nix/profiles/home-manager", home)
 		if _, err := os.Stat(homeProfile); err == nil {
 			return homeProfile, nil

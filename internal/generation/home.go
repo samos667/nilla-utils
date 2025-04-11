@@ -10,11 +10,13 @@ import (
 	"regexp"
 	"strconv"
 	"time"
+
+	"github.com/arnarg/nilla-utils/internal/util"
 )
 
 func CurrentHomeGeneration() (*HomeGeneration, error) {
 	// Check in /nix/var/nix/profiles
-	if user := os.Getenv("USER"); user != "" {
+	if user := util.GetUser(); user != "" {
 		perUser := fmt.Sprintf("/nix/var/nix/profiles/per-user/%s", user)
 		gen, err := currentHomeGeneration(perUser)
 		if err != nil {
@@ -26,7 +28,7 @@ func CurrentHomeGeneration() (*HomeGeneration, error) {
 	}
 
 	// Check ~/.local/state/nix/profiles
-	if home := os.Getenv("HOME"); home != "" {
+	if home := util.GetHomeDir(); home != "" {
 		homeProfile := fmt.Sprintf("%s/.local/state/nix/profiles", home)
 		gen, err := currentHomeGeneration(homeProfile)
 		if err != nil {
@@ -81,6 +83,8 @@ type HomeGeneration struct {
 	ID        int
 	BuildDate time.Time
 	Version   string
+
+	path string
 }
 
 func NewHomeGeneration(root string, info fs.FileInfo) (*HomeGeneration, error) {
@@ -94,8 +98,11 @@ func NewHomeGeneration(root string, info fs.FileInfo) (*HomeGeneration, error) {
 		return nil, err
 	}
 
+	// Build full path
+	path := fmt.Sprintf("%s/%s", root, info.Name())
+
 	// Read home-manager version
-	homeVer, err := os.ReadFile(fmt.Sprintf("%s/%s/hm-version", root, info.Name()))
+	homeVer, err := os.ReadFile(fmt.Sprintf("%s/hm-version", path))
 	if err != nil {
 		return nil, err
 	}
@@ -104,12 +111,23 @@ func NewHomeGeneration(root string, info fs.FileInfo) (*HomeGeneration, error) {
 		ID:        id,
 		BuildDate: info.ModTime(),
 		Version:   string(bytes.TrimSpace(homeVer)),
+		path:      path,
 	}, nil
+}
+
+func (g *HomeGeneration) Delete() error {
+	if err := os.Remove(g.path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func ListHomeGenerations() ([]*HomeGeneration, error) {
 	// Check in /nix/var/nix/profiles
-	if user := os.Getenv("USER"); user != "" {
+	if user := util.GetUser(); user != "" {
 		perUser := fmt.Sprintf("/nix/var/nix/profiles/per-user/%s", user)
 		gens, err := listHomeGenerations(perUser)
 		if err != nil {
@@ -121,7 +139,7 @@ func ListHomeGenerations() ([]*HomeGeneration, error) {
 	}
 
 	// Check ~/.local/state/nix/profiles
-	if home := os.Getenv("HOME"); home != "" {
+	if home := util.GetHomeDir(); home != "" {
 		homeProfile := fmt.Sprintf("%s/.local/state/nix/profiles", home)
 		gens, err := listHomeGenerations(homeProfile)
 		if err != nil {
