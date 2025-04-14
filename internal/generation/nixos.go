@@ -103,6 +103,10 @@ func (g *NixOSGeneration) Delete() error {
 	return nil
 }
 
+func (g *NixOSGeneration) Path() string {
+	return g.path
+}
+
 func getKernelVersion(system string) (string, error) {
 	// List directories in <system>/kernel-modules/lib/modules
 	entries, err := os.ReadDir(fmt.Sprintf("%s/kernel-modules/lib/modules", system))

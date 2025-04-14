@@ -125,6 +125,10 @@ func (g *HomeGeneration) Delete() error {
 	return nil
 }
 
+func (g *HomeGeneration) Path() string {
+	return g.path
+}
+
 func ListHomeGenerations() ([]*HomeGeneration, error) {
 	// Check in /nix/var/nix/profiles
 	if user := util.GetUser(); user != "" {

@@ -96,6 +96,8 @@ in {
             type = lib.types.raw;
             writable = false;
             default.value = import "${config.nixpkgs.src}/nixos/lib/eval-config.nix" {
+              # This needs to be set to null in order for pure evaluation to work
+              system = null;
               lib = import "${config.nixpkgs.src}/lib";
               specialArgs = config.args;
               modules =

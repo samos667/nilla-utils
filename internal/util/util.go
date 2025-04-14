@@ -5,7 +5,11 @@ import (
 	"os/exec"
 	"os/user"
 	"strconv"
+	"strings"
 	"syscall"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/log"
 )
 
 const (
@@ -89,4 +93,31 @@ func SelfElevate() error {
 	}
 
 	return syscall.Exec(spath, args, os.Environ())
+}
+
+func InitLogger(verbose bool) {
+	// Disable timestamp
+	log.SetReportTimestamp(false)
+
+	// Default to info
+	log.SetLevel(log.InfoLevel)
+	if verbose {
+		log.SetLevel(log.DebugLevel)
+	}
+
+	// Set styles
+	styles := log.DefaultStyles()
+	styles.Levels[log.ErrorLevel] = levelStyle(log.ErrorLevel, lipgloss.Color("1"))
+	styles.Levels[log.DebugLevel] = levelStyle(log.DebugLevel, lipgloss.Color("5"))
+	styles.Levels[log.WarnLevel] = levelStyle(log.WarnLevel, lipgloss.Color("3"))
+	styles.Levels[log.InfoLevel] = levelStyle(log.InfoLevel, lipgloss.Color("4"))
+	log.SetStyles(styles)
+}
+
+func levelStyle(level log.Level, color lipgloss.TerminalColor) lipgloss.Style {
+	return lipgloss.NewStyle().
+		SetString(strings.ToUpper(level.String())).
+		Bold(true).
+		MaxWidth(4).
+		Foreground(color)
 }

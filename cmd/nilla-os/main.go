@@ -4,10 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/arnarg/nilla-utils/internal/exec"
 	"github.com/arnarg/nilla-utils/internal/nix"
+	"github.com/arnarg/nilla-utils/internal/project"
 	"github.com/arnarg/nilla-utils/internal/tui"
+	"github.com/arnarg/nilla-utils/internal/util"
+	"github.com/charmbracelet/log"
 	"github.com/urfave/cli/v3"
 )
 
@@ -52,6 +56,12 @@ var app = &cli.Command{
 			Aliases:     []string{"v"},
 			Usage:       "Set log level to verbose",
 			HideDefault: true,
+		},
+		&cli.StringFlag{
+			Name:    "project",
+			Aliases: []string{"p"},
+			Usage:   "The nilla project to use",
+			Value:   "./",
 		},
 	},
 	Commands: []*cli.Command{
@@ -211,6 +221,16 @@ func inferName(name string) (string, error) {
 func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 	var builder, target exec.Executor
 
+	// Setup logger
+	util.InitLogger(cmd.Bool("verbose"))
+
+	// Resolve project
+	source, err := project.Resolve(cmd.String("project"))
+	if err != nil {
+		return err
+	}
+	nillaPath := filepath.Join(source.Path, "nilla.nix")
+
 	// Setup builder, which is always local
 	builder = exec.NewLocalExecutor()
 
@@ -221,13 +241,22 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 	}
 
 	// Attribute of NixOS configuration's toplevel
-	attr := fmt.Sprintf("systems.nixos.%s.result.config.system.build.toplevel", name)
+	attr := fmt.Sprintf("systems.nixos.\"%s\".result.config.system.build.toplevel", name)
+
+	// Check if attribute exists
+	exists, err := nix.ExistsInProject("nilla.nix", source, attr)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("Attribute '%s' does not exist in project \"%s\"", attr, source.Path)
+	}
 
 	//
 	// NixOS configuration build
 	//
 	// Build args for nix build
-	nargs := []string{"-f", "nilla.nix", attr}
+	nargs := []string{"-f", nillaPath, attr}
 
 	// Add extra args depending on the sub command
 	if sc == subCmdBuild {
@@ -391,7 +420,7 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 
 func main() {
 	if err := app.Run(context.Background(), os.Args); err != nil {
-		fmt.Println(err)
+		log.Error(err)
 		os.Exit(1)
 	}
 }

@@ -5,13 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 
+	"github.com/arnarg/nilla-utils/internal/generation"
 	"github.com/arnarg/nilla-utils/internal/nix"
+	"github.com/arnarg/nilla-utils/internal/project"
 	"github.com/arnarg/nilla-utils/internal/tui"
 	"github.com/arnarg/nilla-utils/internal/util"
+	"github.com/charmbracelet/log"
 	"github.com/urfave/cli/v3"
 )
 
@@ -57,6 +61,12 @@ var app = &cli.Command{
 			Aliases:     []string{"v"},
 			Usage:       "Set log level to verbose",
 			HideDefault: true,
+		},
+		&cli.StringFlag{
+			Name:    "project",
+			Aliases: []string{"p"},
+			Usage:   "The nilla project to use",
+			Value:   "./",
 		},
 	},
 	Commands: []*cli.Command{
@@ -173,11 +183,11 @@ func inferNames(name string) ([]string, error) {
 	return []string{name}, nil
 }
 
-func findHomeConfiguration(names []string) (string, error) {
+func findHomeConfiguration(p string, names []string) (string, error) {
 	for _, name := range names {
 		code := fmt.Sprintf("x: x ? \"%s\"", name)
 		out, err := exec.Command(
-			"nix", "eval", "-f", "nilla.nix", "systems.home", "--apply", code,
+			"nix", "eval", "-f", p, "systems.home", "--apply", code,
 		).Output()
 		if err != nil {
 			continue
@@ -186,35 +196,22 @@ func findHomeConfiguration(names []string) (string, error) {
 			return name, nil
 		}
 	}
-	return "", errHomeConfigurationNotFound
-}
-
-func findCurrentGeneration() (string, error) {
-	// Check in /nix/var/nix/profiles
-	if user := util.GetUser(); user != "" {
-		perUser := fmt.Sprintf("/nix/var/nix/profiles/per-user/%s/home-manager", user)
-		if _, err := os.Stat(perUser); err == nil {
-			return perUser, nil
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return "", err
-		}
-	}
-
-	// Check ~/.local/state/nix/profiles
-	if home := util.GetHomeDir(); home != "" {
-		homeProfile := fmt.Sprintf("%s/.local/state/nix/profiles/home-manager", home)
-		if _, err := os.Stat(homeProfile); err == nil {
-			return homeProfile, nil
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return "", err
-		}
-	}
-	return "", errHomeCurrentGenNotFound
+	return "", fmt.Errorf("Home configurations \"%s\" not found", strings.Join(names, ", "))
 }
 
 func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
+	// Setup logger
+	util.InitLogger(cmd.Bool("verbose"))
+
+	// Resolve project
+	source, err := project.Resolve(cmd.String("project"))
+	if err != nil {
+		return err
+	}
+	nillaPath := filepath.Join(source.Path, "nilla.nix")
+
 	// Try to find current generation
-	current, err := findCurrentGeneration()
+	current, err := generation.CurrentHomeGeneration()
 	if err != nil {
 		return err
 	}
@@ -226,19 +223,30 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 	}
 
 	// Find home configuration from candidates
-	name, err := findHomeConfiguration(names)
+	name, err := findHomeConfiguration(nillaPath, names)
 	if err != nil {
 		return err
 	}
 
+	log.Infof("Found system \"%s\"", name)
+
 	// Attribute of home-manager's activation package
-	attr := fmt.Sprintf("systems.home.%s.result.config.home.activationPackage", name)
+	attr := fmt.Sprintf("systems.home.\"%s\".result.config.home.activationPackage", name)
+
+	// Check if attribute exists
+	exists, err := nix.ExistsInProject("nilla.nix", source, attr)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("Attribute '%s' does not exist in project \"%s\"", attr, source.Path)
+	}
 
 	//
 	// Home Manager configuration build
 	//
 	// Build args for nix build
-	nargs := []string{"-f", "nilla.nix", attr}
+	nargs := []string{"-f", nillaPath, attr}
 
 	// Add extra args depending on the sub command
 	if sc == subCmdBuild {
@@ -271,7 +279,7 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 	printSection("Comparing changes")
 
 	// Run nvd diff
-	diff := exec.Command("nvd", "diff", current, string(out))
+	diff := exec.Command("nvd", "diff", current.Path(), string(out))
 	diff.Stderr = os.Stderr
 	diff.Stdout = os.Stderr
 	if err := diff.Run(); err != nil {
@@ -319,7 +327,7 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 
 func main() {
 	if err := app.Run(context.Background(), os.Args); err != nil {
-		fmt.Println(err)
+		log.Error(err)
 		os.Exit(1)
 	}
 }
