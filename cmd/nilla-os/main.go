@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/arnarg/nilla-utils/internal/exec"
 	"github.com/arnarg/nilla-utils/internal/nix"
@@ -152,6 +151,15 @@ var app = &cli.Command{
 			Action: actionFuncFor(subCmdSwitch),
 		},
 
+		// List
+		{
+			Name:        "list",
+			Aliases:     []string{"ls"},
+			Usage:       "List NixOS configurations in project",
+			Description: "List NixOS configurations in project",
+			Action:      listConfigurations,
+		},
+
 		// Generations
 		{
 			Name:        "generations",
@@ -229,7 +237,6 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 	if err != nil {
 		return err
 	}
-	nillaPath := filepath.Join(source.Path, "nilla.nix")
 
 	// Setup builder, which is always local
 	builder = exec.NewLocalExecutor()
@@ -244,19 +251,21 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 	attr := fmt.Sprintf("systems.nixos.\"%s\".result.config.system.build.toplevel", name)
 
 	// Check if attribute exists
-	exists, err := nix.ExistsInProject("nilla.nix", source, attr)
+	exists, err := nix.ExistsInProject(source.NillaPath, source.FixedOutputStoreEntry(), attr)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		return fmt.Errorf("Attribute '%s' does not exist in project \"%s\"", attr, source.Path)
+		return fmt.Errorf("Attribute '%s' does not exist in project \"%s\"", attr, source.FullNillaPath())
 	}
+
+	log.Infof("Found system \"%s\"", name)
 
 	//
 	// NixOS configuration build
 	//
 	// Build args for nix build
-	nargs := []string{"-f", nillaPath, attr}
+	nargs := []string{"-f", source.FullNillaPath(), attr}
 
 	// Add extra args depending on the sub command
 	if sc == subCmdBuild {
@@ -413,6 +422,35 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 		switchc.SetStdout(os.Stdout)
 
 		return switchc.Run()
+	}
+
+	return nil
+}
+
+func listConfigurations(ctx context.Context, cmd *cli.Command) error {
+	// Setup logger
+	util.InitLogger(cmd.Bool("verbose"))
+
+	// Resolve project
+	source, err := project.Resolve(cmd.String("project"))
+	if err != nil {
+		return err
+	}
+
+	// Get a list of home systems
+	systems, err := nix.ListAttrsInProject(source.NillaPath, source.FixedOutputStoreEntry(), "systems.nixos")
+	if err != nil {
+		return err
+	}
+
+	// Print results
+	if len(systems) < 1 {
+		fmt.Println("No NixOS configurations found")
+	} else {
+		printSection("NixOS configurations")
+		for _, system := range systems {
+			fmt.Printf("- %s\n", system)
+		}
 	}
 
 	return nil

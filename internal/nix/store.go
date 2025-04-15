@@ -2,6 +2,8 @@ package nix
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -19,6 +21,9 @@ func AddPathToStore(path string) (*FixedOutputStoreEntry, error) {
 		"nix-store", "--recursive", "--add-fixed", "sha256", path,
 	).Output()
 	if err != nil {
+		if xerr, ok := err.(*exec.ExitError); ok {
+			return nil, errors.New(string(xerr.Stderr))
+		}
 		return nil, err
 	}
 
@@ -54,6 +59,9 @@ func AddGitPathToStore(path string) (*FixedOutputStoreEntry, error) {
 		"--expr", code,
 	).Output()
 	if err != nil {
+		if xerr, ok := err.(*exec.ExitError); ok {
+			return nil, errors.New(string(xerr.Stderr))
+		}
 		return nil, err
 	}
 
@@ -77,6 +85,9 @@ func GetStoreHash(path string) ([]byte, error) {
 		"nix-store", "--query", path, "--hash",
 	).Output()
 	if err != nil {
+		if xerr, ok := err.(*exec.ExitError); ok {
+			return nil, errors.New(string(xerr.Stderr))
+		}
 		return nil, err
 	}
 
@@ -97,6 +108,48 @@ func GetStorePathName(path string) (string, error) {
 	}
 
 	return parts[1], nil
+}
+
+func ListAttrsInProject(file string, entry *FixedOutputStoreEntry, attr string) ([]string, error) {
+	storePathName, err := GetStorePathName(entry.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create nix code that lists attr names
+	code := fmt.Sprintf(
+		`
+			let
+				source = builtins.path {path = "%s"; sha256 = "%s"; name = "%s";};
+				project = import "${source}/%s";
+			in
+				builtins.attrNames (project.%s or {})
+		`,
+		entry.Path, entry.Hash, storePathName,
+		file,
+		attr,
+	)
+
+	// Execute code
+	eval, err := exec.Command(
+		"nix", "eval",
+		"--extra-experimental-features", "nix-command",
+		"--json", "--expr", code,
+	).Output()
+	if err != nil {
+		if xerr, ok := err.(*exec.ExitError); ok {
+			return nil, errors.New(string(xerr.Stderr))
+		}
+		return nil, err
+	}
+
+	// Parse json
+	names := []string{}
+	if err := json.Unmarshal(eval, &names); err != nil {
+		return nil, err
+	}
+
+	return names, nil
 }
 
 func ExistsInProject(file string, entry *FixedOutputStoreEntry, name string) (bool, error) {
@@ -147,7 +200,7 @@ func ExistsInProject(file string, entry *FixedOutputStoreEntry, name string) (bo
 	).Output()
 	if err != nil {
 		if xerr, ok := err.(*exec.ExitError); ok {
-			fmt.Println(string(xerr.Stderr))
+			return false, errors.New(string(xerr.Stderr))
 		}
 		return false, err
 	}
@@ -158,4 +211,64 @@ func ExistsInProject(file string, entry *FixedOutputStoreEntry, name string) (bo
 	}
 
 	return val, nil
+}
+
+type FetchGitOptions struct {
+	Revision   string `json:"rev,omitempty"`
+	Reference  string `json:"ref,omitempty"`
+	Submodules bool   `json:"submodules"`
+}
+
+func FetchGit(url string, opts *FetchGitOptions) (*FixedOutputStoreEntry, error) {
+	// Serialize options to json
+	buf, err := json.Marshal(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Template code for fetching git repo
+	code := fmt.Sprintf(
+		`
+			let
+				info = builtins.fromJSON ''%s'';
+			in
+				builtins.fetchGit (
+					{ url = "%s"; }
+					// (if info ? rev && info.rev != null then { inherit (info) rev; } else {})
+					// (if info ? ref && info.ref != null then { inherit (info) ref; } else {})
+					// (
+						if info ? submodules && info.submodules != null
+						then { inherit (info) submodules; } else {}
+					)
+				)
+		`,
+		buf, url,
+	)
+
+	// Execute code
+	eval, err := exec.Command(
+		"nix", "eval",
+		"--extra-experimental-features", "nix-command",
+		"--raw", "--impure", "--expr", code,
+	).Output()
+	if err != nil {
+		if xerr, ok := err.(*exec.ExitError); ok {
+			return nil, errors.New(string(xerr.Stderr))
+		}
+		return nil, err
+	}
+
+	// Trim output
+	storePath := strings.TrimSpace(string(eval))
+
+	// Get hash of store path
+	hash, err := GetStoreHash(storePath)
+	if err != nil {
+		return nil, err
+	}
+
+	return &FixedOutputStoreEntry{
+		Path: storePath,
+		Hash: strings.TrimSpace(string(hash)),
+	}, nil
 }

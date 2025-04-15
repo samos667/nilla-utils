@@ -5,25 +5,11 @@ import (
 	"context"
 	"io"
 	"os"
-	gexec "os/exec"
 	"os/signal"
 	"syscall"
 
 	"github.com/arnarg/nilla-utils/internal/exec"
 )
-
-// CurrentSystem returns `builtins.currentSystem` from `nix eval`.
-func CurrentSystem() (string, error) {
-	sys, err := gexec.Command(
-		"nix", "eval",
-		"--expr", "builtins.currentSystem", "--raw", "--impure",
-	).Output()
-	if err != nil {
-		return "", err
-	}
-
-	return string(sys), nil
-}
 
 type NixCommand struct {
 	cmd   string

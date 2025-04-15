@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/arnarg/nilla-utils/internal/generation"
@@ -110,6 +109,15 @@ var app = &cli.Command{
 			Action: actionFuncFor(subCmdSwitch),
 		},
 
+		// List
+		{
+			Name:        "list",
+			Aliases:     []string{"ls"},
+			Usage:       "List Home Manager configurations in project",
+			Description: "List Home Manager configurations in project",
+			Action:      listConfigurations,
+		},
+
 		// Generations
 		{
 			Name:        "generations",
@@ -208,7 +216,6 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 	if err != nil {
 		return err
 	}
-	nillaPath := filepath.Join(source.Path, "nilla.nix")
 
 	// Try to find current generation
 	current, err := generation.CurrentHomeGeneration()
@@ -223,30 +230,30 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 	}
 
 	// Find home configuration from candidates
-	name, err := findHomeConfiguration(nillaPath, names)
+	name, err := findHomeConfiguration(source.FullNillaPath(), names)
 	if err != nil {
 		return err
 	}
-
-	log.Infof("Found system \"%s\"", name)
 
 	// Attribute of home-manager's activation package
 	attr := fmt.Sprintf("systems.home.\"%s\".result.config.home.activationPackage", name)
 
 	// Check if attribute exists
-	exists, err := nix.ExistsInProject("nilla.nix", source, attr)
+	exists, err := nix.ExistsInProject(source.NillaPath, source.FixedOutputStoreEntry(), attr)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		return fmt.Errorf("Attribute '%s' does not exist in project \"%s\"", attr, source.Path)
+		return fmt.Errorf("Attribute '%s' does not exist in project \"%s\"", attr, source.FullNillaPath())
 	}
+
+	log.Infof("Found system \"%s\"", name)
 
 	//
 	// Home Manager configuration build
 	//
 	// Build args for nix build
-	nargs := []string{"-f", nillaPath, attr}
+	nargs := []string{"-f", source.FullNillaPath(), attr}
 
 	// Add extra args depending on the sub command
 	if sc == subCmdBuild {
@@ -319,6 +326,35 @@ func run(ctx context.Context, cmd *cli.Command, sc subCmd) error {
 
 		if err := switchc.Run(); err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+func listConfigurations(ctx context.Context, cmd *cli.Command) error {
+	// Setup logger
+	util.InitLogger(cmd.Bool("verbose"))
+
+	// Resolve project
+	source, err := project.Resolve(cmd.String("project"))
+	if err != nil {
+		return err
+	}
+
+	// Get a list of home systems
+	systems, err := nix.ListAttrsInProject(source.NillaPath, source.FixedOutputStoreEntry(), "systems.home")
+	if err != nil {
+		return err
+	}
+
+	// Print results
+	if len(systems) < 1 {
+		fmt.Println("No Home Manager configurations found")
+	} else {
+		printSection("Home Manager configurations")
+		for _, system := range systems {
+			fmt.Printf("- %s\n", system)
 		}
 	}
 

@@ -2,10 +2,12 @@ package project
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/arnarg/nilla-utils/internal/nix"
@@ -13,12 +15,41 @@ import (
 	"github.com/charmbracelet/log"
 )
 
+// ProjectSource is a project that has been resolved and added to the nix store.
+type ProjectSource struct {
+	NillaPath string
+	StorePath string
+	StoreHash string
+}
+
+// FullProjectPath returns a full path to the directory containing the `nilla.nix`
+// file in the project.
+func (s *ProjectSource) FullProjectPath() string {
+	return filepath.Dir(s.FullNillaPath())
+}
+
+// FullNillaPath returns a full path to the `nilla.nix` file in the project.
+func (s *ProjectSource) FullNillaPath() string {
+	return filepath.Clean(filepath.Join(s.StorePath, s.NillaPath))
+}
+
+// FixedOutputStoreEntry returns a `*nix.FixedOutputStoreEntry` for the base of
+// the nilla project.
+func (s *ProjectSource) FixedOutputStoreEntry() *nix.FixedOutputStoreEntry {
+	return &nix.FixedOutputStoreEntry{
+		Path: s.StorePath,
+		Hash: s.StoreHash,
+	}
+}
+
 // Resolve takes in a project uri and tries to resolve it into a nix store path.
 // Currently supported URIs:
 //   - Paths starting with `./`, `/` or `~`
 //   - URI starting with `path:`
-func Resolve(uri string) (*nix.FixedOutputStoreEntry, error) {
-	var entry *nix.FixedOutputStoreEntry
+//   - URI starting with `github:` (example: `github:owner/repo`)
+//   - URI starting with `gitlab:` (example: `gitlab:owner/repo`)
+func Resolve(uri string) (*ProjectSource, error) {
+	var source *ProjectSource
 
 	log.Infof("Looking for project at %s", uri)
 
@@ -29,7 +60,7 @@ func Resolve(uri string) (*nix.FixedOutputStoreEntry, error) {
 		if err != nil {
 			return nil, err
 		}
-		entry = resolved
+		source = resolved
 
 	// With `path:` prefix
 	case strings.HasPrefix(uri, "path:"):
@@ -37,18 +68,40 @@ func Resolve(uri string) (*nix.FixedOutputStoreEntry, error) {
 		if err != nil {
 			return nil, err
 		}
-		entry = resolved
+		source = resolved
+
+	// With `github:` prefix
+	case strings.HasPrefix(uri, "github:"):
+		resolved, err := ResolveGithub(uri)
+		if err != nil {
+			return nil, err
+		}
+		source = resolved
+
+	// With `gitlab:` prefix
+	case strings.HasPrefix(uri, "gitlab:"):
+		resolved, err := ResolveGitlab(uri)
+		if err != nil {
+			return nil, err
+		}
+		source = resolved
 	}
 
-	if entry != nil {
-		log.Debugf("Resolved project \"%s\"", entry.Path)
-		return entry, nil
+	if source != nil {
+		log.Debugf("Resolved project \"%s\"", source.FullProjectPath())
+		return source, nil
 	}
 
-	return nil, fmt.Errorf("unknown project uri pattern: '%s'", uri)
+	return nil, fmt.Errorf("Could not parse URL scheme for %s", uri)
 }
 
-func ResolvePath(path string) (*nix.FixedOutputStoreEntry, error) {
+// ResolvePath resolves a path based project uri and loads it into the nix store.
+func ResolvePath(path string) (*ProjectSource, error) {
+	// Strip nilla.nix suffix, if provided
+	if strings.HasSuffix(path, "nilla.nix") {
+		path = filepath.Dir(path)
+	}
+
 	// Resolve tilde and relative path
 	fullpath, err := resolveRealPath(path)
 	if err != nil {
@@ -61,12 +114,13 @@ func ResolvePath(path string) (*nix.FixedOutputStoreEntry, error) {
 		return nil, err
 	}
 
-	log.Debugf("Found path %s", resolved)
-
-	// Check if the resolved directory is a git directory
-	if isGitDir(resolved) {
-		return resolveGitPath(resolved)
+	// Check if we're in a git repository
+	if root, err := searchUpForGitDir(resolved); err == nil {
+		log.Debugf("Found git repository root at %s", root)
+		return resolveGitPath(root, resolved)
 	}
+
+	log.Debugf("Found path %s", resolved)
 
 	// Add resolved path to nix store
 	entry, err := nix.AddPathToStore(resolved)
@@ -74,7 +128,88 @@ func ResolvePath(path string) (*nix.FixedOutputStoreEntry, error) {
 		return nil, err
 	}
 
-	return entry, nil
+	return &ProjectSource{
+		NillaPath: "./nilla.nix",
+		StorePath: entry.Path,
+		StoreHash: entry.Hash,
+	}, nil
+}
+
+// ResolveGithub resolves a uri starting with `github:` and loads it into the nix store
+// from a github repository.
+func ResolveGithub(uri string) (*ProjectSource, error) {
+	// Parse as url
+	gitURL, err := url.Parse(fmt.Sprintf("github://%s", strings.TrimPrefix(uri, "github:")))
+	if err != nil {
+		return nil, err
+	}
+
+	return resolveGenericGit(uri, gitURL, "github.com")
+}
+
+// ResolveGitlab resolves a uri starting with `gitlab:` and loads it into the nix store
+// form a gitlab repository.
+func ResolveGitlab(uri string) (*ProjectSource, error) {
+	// Parse as url
+	gitURL, err := url.Parse(fmt.Sprintf("gitlab://%s", strings.TrimPrefix(uri, "gitlab:")))
+	if err != nil {
+		return nil, err
+	}
+
+	return resolveGenericGit(uri, gitURL, "gitlab.com")
+}
+
+func resolveGenericGit(uri string, gitURL *url.URL, defaultHost string) (*ProjectSource, error) {
+	// Parse various fields from url
+	owner := gitURL.Host
+	paths := strings.Split(strings.TrimPrefix(gitURL.Path, "/"), "/")
+	if len(paths) < 1 {
+		return nil, fmt.Errorf("Project URL \"%s\" missing repository", uri)
+	}
+	repo := paths[0]
+
+	// Parse query options
+	rev := gitURL.Query().Get("rev")
+	ref := gitURL.Query().Get("ref")
+	submodules := false
+	if sub, err := strconv.ParseBool(gitURL.Query().Get("submodules")); err == nil {
+		submodules = sub
+	}
+	host := defaultHost
+	if gitURL.Query().Has("host") {
+		host = gitURL.Query().Get("host")
+	}
+
+	// Fetch git repo
+	fetchURL := fmt.Sprintf("git@%s:%s/%s.git", host, owner, repo)
+	log.Debugf("Fetching \"%s\"", fetchURL)
+	entry, err := nix.FetchGit(
+		fetchURL,
+		&nix.FetchGitOptions{
+			Revision:   rev,
+			Reference:  ref,
+			Submodules: submodules,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check dir
+	nilla := "./nilla.nix"
+	if gitURL.Query().Has("dir") {
+		nilla = filepath.Join(gitURL.Query().Get("dir"), "nilla.nix")
+	}
+
+	if info, err := os.Stat(filepath.Join(entry.Path, nilla)); err != nil || info.IsDir() {
+		return nil, fmt.Errorf("Directory \"%s\" does not contain a nilla.nix", filepath.Dir(nilla))
+	}
+
+	return &ProjectSource{
+		NillaPath: nilla,
+		StorePath: entry.Path,
+		StoreHash: entry.Hash,
+	}, nil
 }
 
 func isPath(uri string) bool {
@@ -106,20 +241,30 @@ func searchUpForNillaNix(path string) (string, error) {
 			continue
 		}
 
-		return "", fmt.Errorf("could not find find nilla.nix in %s", path)
+		return "", fmt.Errorf("could not find nilla.nix in %s", path)
 	}
 }
 
-func isGitDir(path string) bool {
-	info, err := os.Stat(filepath.Join(path, ".git"))
-	if err != nil {
-		return false
-	}
+func searchUpForGitDir(path string) (string, error) {
+	for {
+		info, err := os.Stat(filepath.Join(path, ".git"))
+		if err == nil && info.IsDir() {
+			return path, nil
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
 
-	return info.IsDir()
+		if dir := filepath.Dir(path); dir != path {
+			path = dir
+			continue
+		}
+
+		return "", fmt.Errorf("could not find a git directory in %s", path)
+	}
 }
 
-func resolveGitPath(path string) (*nix.FixedOutputStoreEntry, error) {
+func resolveGitPath(root, path string) (*ProjectSource, error) {
 	// Get untracked files
 	untracked := getUntrackedFiles(path)
 	if len(untracked) > 0 {
@@ -131,12 +276,19 @@ func resolveGitPath(path string) (*nix.FixedOutputStoreEntry, error) {
 	}
 
 	// Add git path to nix store
-	entry, err := nix.AddGitPathToStore(path)
+	entry, err := nix.AddGitPathToStore(root)
 	if err != nil {
 		return nil, err
 	}
 
-	return entry, nil
+	// Strip root prefix from path
+	stripped := strings.TrimPrefix(path, root)
+
+	return &ProjectSource{
+		NillaPath: filepath.Join("./", stripped, "nilla.nix"),
+		StorePath: entry.Path,
+		StoreHash: entry.Hash,
+	}, nil
 }
 
 func getUntrackedFiles(path string) []string {
