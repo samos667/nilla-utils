@@ -62,7 +62,7 @@ in {
 
               builder =
                 if directories ? "lib" && (builtins.readDir "${src}/lib") ? "default.nix"
-                then (import "${src}/lib").homeManagerConfiguration
+                then (import "${src}/lib" {inherit (config.pkgs) lib;}).homeManagerConfiguration
                 else
                   {
                     pkgs,
