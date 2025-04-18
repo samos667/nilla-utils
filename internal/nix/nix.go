@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/arnarg/nilla-utils/internal/exec"
+	"github.com/sourcegraph/conc/pool"
 )
 
 type NixCommand struct {
@@ -105,10 +106,8 @@ func (c NixCommand) runStdout(ctx context.Context, cmd string, args []string) ([
 	return bytes.TrimSpace(b.Bytes()), nil
 }
 
-func (c NixCommand) runWithReporter(ctx context.Context, cmd string, args []string) (res []byte, err error) {
-	cctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	sctx, stop := signal.NotifyContext(cctx, syscall.SIGINT, syscall.SIGTERM)
+func (c NixCommand) runWithReporter(ctx context.Context, cmd string, args []string) ([]byte, error) {
+	sctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	// Add internal-json format flags
@@ -117,7 +116,7 @@ func (c NixCommand) runWithReporter(ctx context.Context, cmd string, args []stri
 	// Create nix command
 	nixc, err := c.exec.CommandContext(sctx, cmd, args...)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	// Create a buffer to capture nix's stdout
@@ -127,7 +126,7 @@ func (c NixCommand) runWithReporter(ctx context.Context, cmd string, args []stri
 	// Get stderr pipe from nix command
 	stderr, err := nixc.StderrPipe()
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	// Plug stdin if provided
@@ -137,27 +136,29 @@ func (c NixCommand) runWithReporter(ctx context.Context, cmd string, args []stri
 
 	// Start nix command
 	if err = nixc.Start(); err != nil {
-		return
+		return nil, err
 	}
+
+	// Create a goroutine pool
+	p := pool.New().
+		WithContext(sctx).
+		WithCancelOnError().
+		WithFirstError()
 
 	// Run progress reporter
-	var perr error
-	if perr = c.reporter.Run(sctx, NewProgressDecoder(stderr)); perr != nil {
-		cancel()
-	}
+	p.Go(func(ctx context.Context) error {
+		return c.reporter.Run(ctx, NewProgressDecoder(stderr))
+	})
 
 	// Wait for nix command
-	cerr := nixc.Wait()
+	p.Go(func(ctx context.Context) error {
+		return nixc.Wait()
+	})
 
-	// Set error
-	if perr != nil {
-		err = perr
-		return
-	} else if cerr != nil {
-		err = cerr
-		return
+	// Wait for pool
+	if err := p.Wait(); err != nil {
+		return nil, err
 	}
 
-	res = bytes.TrimSpace(b.Bytes())
-	return
+	return bytes.TrimSpace(b.Bytes()), nil
 }

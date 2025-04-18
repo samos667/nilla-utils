@@ -9,6 +9,7 @@ require (
 	github.com/charmbracelet/log v0.4.1
 	github.com/kevinburke/ssh_config v1.2.0
 	github.com/skeema/knownhosts v1.3.1
+	github.com/sourcegraph/conc v0.3.0
 	github.com/urfave/cli/v3 v3.1.1
 	github.com/valyala/fastjson v1.6.4
 	golang.org/x/crypto v0.37.0
@@ -32,6 +33,8 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
+	go.uber.org/atomic v1.7.0 // indirect
+	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect

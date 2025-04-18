@@ -64,6 +64,9 @@ schema = 3
   [mod."github.com/skeema/knownhosts"]
     version = "v1.3.1"
     hash = "sha256-kjqQDzuncQNTuOYegqVZExwuOt/Z73m2ST7NZFEKixI="
+  [mod."github.com/sourcegraph/conc"]
+    version = "v0.3.0"
+    hash = "sha256-mIdMs9MLAOBKf3/0quf1iI3v8uNWydy7ae5MFa+F2Ko="
   [mod."github.com/urfave/cli/v3"]
     version = "v3.1.1"
     hash = "sha256-Rkljw402yWNxHBvQL1g6kNHNU9V0PA4olnoaOC31LlE="
@@ -73,6 +76,12 @@ schema = 3
   [mod."github.com/xo/terminfo"]
     version = "v0.0.0-20220910002029-abceb7e1c41e"
     hash = "sha256-GyCDxxMQhXA3Pi/TsWXpA8cX5akEoZV7CFx4RO3rARU="
+  [mod."go.uber.org/atomic"]
+    version = "v1.7.0"
+    hash = "sha256-g83RSzO/5k8W3qyiIsrQbVq1F8qJGccdWEXTjkqUOfc="
+  [mod."go.uber.org/multierr"]
+    version = "v1.9.0"
+    hash = "sha256-tlDRooh/V4HDhZohsUrxot/Y6uVInVBtRWCZbj/tPds="
   [mod."golang.org/x/crypto"]
     version = "v0.37.0"
     hash = "sha256-9NwDEcii1e2JYM/+3y1yNzWnt/ChMm27e9OtfuF39OM="

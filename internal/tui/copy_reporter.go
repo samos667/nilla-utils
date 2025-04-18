@@ -99,7 +99,7 @@ func (m copyModel) handleEvent(ev nix.Event) (tea.Model, tea.Cmd) {
 		// error
 		if event.Level == 0 {
 			m.err = errors.New(event.Text)
-			return m, tea.Quit
+			return m, nil
 		}
 
 		// Just display the message
@@ -211,7 +211,15 @@ func (m copyModel) handleResultEvent(ev nix.Event) (tea.Model, tea.Cmd) {
 
 func (m copyModel) View() string {
 	if m.err != nil {
-		return ""
+		return fmt.Sprintf(
+			"%s%s\n",
+			m.spinner.View(),
+			lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("1")).
+				SetString("Copying failed! Exiting...").
+				String(),
+		)
 	}
 
 	if !m.initialized {
