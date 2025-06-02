@@ -12,7 +12,12 @@ in
           src = pins.nixpkgs;
 
           settings.overlays = [
-            (import "${pins.gomod2nix}/overlay.nix")
+            (final: prev: let
+              callPackage = final.callPackage;
+            in {
+              inherit (callPackage "${pins.gomod2nix}/builder" {}) buildGoApplication mkGoEnv mkVendorEnv;
+              gomod2nix = callPackage "${pins.gomod2nix}/default.nix" {};
+            })
           ];
         };
       };
