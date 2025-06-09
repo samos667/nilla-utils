@@ -2,6 +2,14 @@
 
 [Nilla](https://github.com/nilla-nix/nilla) modules and cli plugins to work with NixOS and home-manager configurations.
 
+## Overview
+
+`nilla-utils` enhances your [Nilla](https://github.com/nilla-nix/nilla) experience by providing:
+
+*   **Simplified NixOS & Home Manager Definitions:** Easily declare and manage your system configurations directly within Nilla.
+*   **Powerful Configuration Generators:** Automate the creation of Nilla inputs, packages, shells, overlays, and even full NixOS/Home Manager systems from your project's directory structure.
+*   **Convenient CLI Plugins:** Extend the `nilla` command-line tool with `nilla os` and `nilla home` subcommands for building, switching, and managing your NixOS and Home Manager generations, including diffing and remote deployment capabilities.
+
 # Table of contents
 
 - [Quickstart](#quickstart)
@@ -15,10 +23,11 @@
   - [Overlays](#overlays)
   - [NixOS](#nixos-2)
   - [Home Manager](#home-manager-2)
+- [Examples](#examples)
 
 ## Quickstart
 
-Provided you're using `npins` with your nilla configuration, add nilla-utils.
+If you're using `npins` with your Nilla configuration, add nilla-utils as a dependency:
 
 ```sh
 npins add github -b main arnarg nilla-utils
@@ -148,14 +157,73 @@ To install the plugins the following can be added to your NixOS or home-manager 
   ];
 }
 ```
+### Using the CLI Plugins
+
+Once installed, you can use the following commands:
+
+#### NixOS (`nilla os`)
+
+For managing NixOS systems defined in `systems.nixos`.
+
+*   **Build a configuration:**
+    ```sh
+    nilla os build <system_name>
+    ```
+*   **Build and switch to a configuration:**
+    ```sh
+    nilla os switch <system_name>
+    # For remote targets:
+    # nilla os switch <system_name> --target user@hostname
+    ```
+*   **Test a configuration:**
+    ```sh
+    nilla os test <system_name>
+    ```
+*   **Make configuration boot default:**
+    ```sh
+    nilla os boot <system_name>
+    ```
+*   **List available NixOS configurations:**
+    ```sh
+    nilla os list
+    ```
+*   **Manage generations:**
+    ```sh
+    nilla os generations list
+    nilla os generations clean --keep 3 # Keeps the last 3 generations
+    ```
+    Use `nilla os --help` or `nilla os <subcommand> --help` for more details.
+
+#### Home Manager (`nilla home`)
+
+For managing Home Manager configurations defined in `systems.home`.
+
+*   **Build a configuration:**
+    ```sh
+    nilla home build <user@system_name>
+    ```
+*   **Build and switch to a configuration:**
+    ```sh
+    nilla home switch <user@system_name>
+    ```
+*   **List available Home Manager configurations:**
+    ```sh
+    nilla home list
+    ```
+*   **Manage generations:**
+    ```sh
+    nilla home generations list
+    nilla home generations clean --keep 3 # Keeps the last 3 generations
+    ```
+    Use `nilla home --help` or `nilla home <subcommand> --help` for more details.
 
 ## Generators
 
-nilla-utils modules add various generators that can be used to generate inputs and systems from various sources.
+`nilla-utils` modules include powerful generators that automate the creation of Nilla configurations by discovering files and structures within your project. This reduces boilerplate and encourages a consistent project layout.
 
 ### Inputs
 
-The inputs generator will generate `config.inputs.*` from you npins.
+The inputs generator will generate `config.inputs.*` from your npins.
 
 ```nix
 # nilla.nix
@@ -387,3 +455,15 @@ in nilla.create ({config}: {
   };
 })
 ```
+
+## Examples
+
+You can find more detailed examples of how to use `nilla-utils` in the [`examples/`](./examples) directory of this repository.
+
+## Contributing
+
+Contributions are welcome! Please feel free to open an issue or submit a pull request.
+
+## License
+
+`nilla-utils` is licensed under the MIT License. See the [LICENSE](./LICENSE) file for details.
