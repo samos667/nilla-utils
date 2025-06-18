@@ -21,7 +21,7 @@ in {
           description = "Additional arguments to pass to overlayed packages.";
           type = lib.types.attrs.any;
           default.value = {};
-          };
+        };
       }));
     };
   };

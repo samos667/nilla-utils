@@ -6,5 +6,6 @@
     ./overlay.nix
     ./packages.nix
     ./shells.nix
+    ./project.nix
   ];
 }

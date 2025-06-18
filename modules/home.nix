@@ -1,6 +1,6 @@
 {config}: let
   inherit (config) inputs lib;
-  inherit (builtins) listToAttrs;
+  inherit (builtins) listToAttrs pathExists;
 in {
   includes = [
     ./lib.nix
@@ -128,7 +128,7 @@ in {
     # Generate home configurations from `generators.home`
     systems.home =
       lib.modules.when
-      (config.generators.home.folder != null)
+      (config.generators.home.folder != null && pathExists config.generators.home.folder)
       (listToAttrs (map (host: {
         name = "${config.generators.home.username}@${host.hostname}";
         value = {

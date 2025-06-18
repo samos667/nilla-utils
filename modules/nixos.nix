@@ -1,6 +1,6 @@
 {config}: let
   inherit (config) inputs lib;
-  inherit (builtins) listToAttrs;
+  inherit (builtins) listToAttrs pathExists;
 
   # NixOS module to add options generateRegistryFromInputs
   # and generateNixPathFromInputs.
@@ -159,7 +159,7 @@ in {
     # Generate NixOS configurations from `generators.nixos`
     systems.nixos =
       lib.modules.when
-      (config.generators.nixos.folder != null)
+      (config.generators.nixos.folder != null && pathExists config.generators.nixos.folder)
       (listToAttrs (map (host: {
         name = host.hostname;
         value = {

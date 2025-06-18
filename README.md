@@ -18,6 +18,7 @@
 - [Nilla cli plugins](#nilla-cli-plugins)
 - [Generators](#generators)
   - [Inputs](#inputs)
+  - [Project](#project)
   - [Packages](#packages)
   - [Shells](#shells)
   - [Overlays](#overlays)
@@ -250,6 +251,60 @@ in nilla.create ({config}: {
       # Set nilla loader for nilla-utils (although redundant).
       nilla-utils.loader = "nilla";
     };
+
+    # ...
+  };
+})
+```
+
+### Project
+
+The project generator simplifies configuring other generators by assuming a standard project structure. When `generators.project.folder` is set, it automatically configures the `packages`, `shells`, `overlays`, `nixos` and `home` generators to discover content within subdirectories of the specified folder.
+
+For example, if you have a project structure like this:
+
+```
+.
+├── hosts
+│   ├── my-nixos-system
+│   │   ├── configuration.nix
+│   │   └── hardware-configuration.nix
+│   └── my-home-system
+│       └── home.nix
+├── packages
+│   └── my-cli-tool
+│       └── default.nix
+├── shells
+│   └── dev-shell
+│       └── default.nix
+└── nilla.nix
+```
+
+You can enable consolidated generation in your `nilla.nix`:
+
+```nix
+# nilla.nix
+let
+  pins = import ./npins;
+
+  nilla = import pins.nilla;
+in nilla.create ({config}: {
+  includes = [
+    "${pins.nilla-utils}/modules"
+  ];
+
+  config = {
+    # Load all pins from npins and generate nilla inputs.
+    generators.inputs.pins = pins;
+
+    # Set the root folder for project-level generators.
+    # This will automatically set:
+    # - generators.packages.folder = "./packages";
+    # - generators.shells.folder = "./shells";
+    # - generators.overlays.default.folder = "./packages";
+    # - generators.nixos.folder = "./hosts";
+    # - generators.home.folder = "./hosts";
+    generators.project.folder = ./.;
 
     # ...
   };

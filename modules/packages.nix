@@ -1,6 +1,6 @@
 {config}: let
   inherit (config) lib;
-  inherit (builtins) mapAttrs;
+  inherit (builtins) mapAttrs pathExists;
 in {
   options.generators.packages = {
     folder = lib.options.create {
@@ -31,7 +31,7 @@ in {
   config = {
     packages =
       lib.modules.when
-      (config.generators.packages.folder != null)
+      (config.generators.packages.folder != null && pathExists config.generators.packages.folder)
       (
         mapAttrs
         (name: dir: {
