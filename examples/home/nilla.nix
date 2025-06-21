@@ -47,12 +47,18 @@ in
         home-manager = config.inputs.hm-master;
 
         modules = [
-          {
+          ({homeModules, ...}: {
+            imports = [homeModules.common];
+
             home.username = "user";
             home.homeDirectory = "/home/user";
             home.stateVersion = "24.11";
-          }
+          })
         ];
+      };
+
+      modules.home.common = {
+        programs.git.enable = true;
       };
     };
   })

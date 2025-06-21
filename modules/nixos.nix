@@ -2,6 +2,8 @@
   inherit (config) inputs lib;
   inherit (builtins) listToAttrs pathExists;
 
+  globalModules = config.modules;
+
   # NixOS module to add options generateRegistryFromInputs
   # and generateNixPathFromInputs.
   nixosModule = {
@@ -99,7 +101,14 @@ in {
               # This needs to be set to null in order for pure evaluation to work
               system = null;
               lib = import "${config.nixpkgs.src}/lib";
-              specialArgs = config.args;
+              specialArgs =
+                {
+                  nixosModules =
+                    if globalModules ? "nixos"
+                    then globalModules.nixos
+                    else {};
+                }
+                // config.args;
               modules =
                 config.modules
                 ++ [
@@ -149,12 +158,21 @@ in {
 
   config = {
     assertions =
-      lib.attrs.mapToList
-      (name: value: {
-        assertion = !(builtins.isNull value.nixpkgs);
-        message = "A Nixpkgs instance is required for the NixOS system \"${name}\", but none was provided and \"inputs.nixpkgs\" does not exist.";
-      })
-      config.systems.nixos;
+      (lib.lists.when config.generators.assertPaths [
+        {
+          assertion =
+            config.generators.nixos.folder
+            == null
+            || (config.generators.nixos.folder != null && pathExists config.generators.nixos.folder);
+          message = "NixOS generator's folder \"${config.generators.nixos.folder}\" does not exist.";
+        }
+      ])
+      ++ (lib.attrs.mapToList
+        (name: value: {
+          assertion = !(builtins.isNull value.nixpkgs);
+          message = "A Nixpkgs instance is required for the NixOS system \"${name}\", but none was provided and \"inputs.nixpkgs\" does not exist.";
+        })
+        config.systems.nixos);
 
     # Generate NixOS configurations from `generators.nixos`
     systems.nixos =

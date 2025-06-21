@@ -18,7 +18,9 @@ in
         system = "x86_64-linux";
 
         modules = [
-          {
+          ({nixosModules, ...}: {
+            imports = [nixosModules.common];
+
             boot.loader.grub.devices = ["/dev/sda"];
             fileSystems = {
               "/" = {
@@ -26,8 +28,16 @@ in
               };
             };
             system.stateVersion = "24.11";
-          }
+          })
         ];
+      };
+
+      modules.nixos.common = {
+        users.users.myuser = {
+          isNormalUser = true;
+          group = "myuser";
+        };
+        users.groups.myuser = {};
       };
     };
   })

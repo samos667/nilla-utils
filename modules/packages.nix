@@ -29,6 +29,16 @@ in {
   };
 
   config = {
+    assertions = let
+      folder = config.generators.packages.folder;
+    in
+      lib.lists.when config.generators.assertPaths [
+        {
+          assertion = folder == null || (folder != null && pathExists folder);
+          message = "Packages generator's configured folder \"${toString folder}\" does not exist.";
+        }
+      ];
+
     packages =
       lib.modules.when
       (config.generators.packages.folder != null && pathExists config.generators.packages.folder)

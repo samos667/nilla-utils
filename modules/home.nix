@@ -1,6 +1,8 @@
 {config}: let
   inherit (config) inputs lib;
   inherit (builtins) listToAttrs pathExists;
+
+  globalModules = config.modules;
 in {
   includes = [
     ./lib.nix
@@ -85,8 +87,15 @@ in {
               builder {
                 pkgs = config.pkgs;
                 lib = config.pkgs.lib;
-                extraSpecialArgs = config.args;
                 modules = config.modules;
+                extraSpecialArgs =
+                  {
+                    homeModules =
+                      if globalModules ? "home"
+                      then globalModules.home
+                      else {};
+                  }
+                  // config.args;
               };
           };
         };
@@ -118,12 +127,21 @@ in {
 
   config = {
     assertions =
-      lib.attrs.mapToList
-      (name: value: {
-        assertion = !(builtins.isNull value.pkgs);
-        message = "A Nixpkgs instance is required for the home-manager configuration \"${name}\", but none was provided and \"inputs.nixpkgs\" does not exist.";
-      })
-      config.systems.home;
+      (lib.lists.when config.generators.assertPaths [
+        {
+          assertion =
+            config.generators.home.folder
+            == null
+            || (config.generators.home.folder != null && pathExists config.generators.home.folder);
+          message = "Home-Manager generator's folder \"${config.generators.home.folder}\" does not exist.";
+        }
+      ])
+      ++ (lib.attrs.mapToList
+        (name: value: {
+          assertion = !(builtins.isNull value.pkgs);
+          message = "A Nixpkgs instance is required for the home-manager configuration \"${name}\", but none was provided and \"inputs.nixpkgs\" does not exist.";
+        })
+        config.systems.home);
 
     # Generate home configurations from `generators.home`
     systems.home =

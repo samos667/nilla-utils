@@ -1,6 +1,6 @@
 {config}: let
   inherit (config) lib;
-  inherit (builtins) mapAttrs;
+  inherit (builtins) mapAttrs pathExists;
 in {
   options = {
     overlays = lib.options.create {
@@ -27,6 +27,14 @@ in {
   };
 
   config = {
+    assertions = lib.lists.when config.generators.assertPaths (
+      lib.attrs.mapToList (name: opts: {
+        assertion = pathExists opts.folder;
+        message = "Overlay generator's folder \"${toString opts.folder}\" for overlay \"${name}\" does not exist.";
+      })
+      config.generators.overlays
+    );
+
     overlays = let
       mkOverlayFromDir = dir: args: (f: p: (
         mapAttrs
@@ -35,7 +43,11 @@ in {
       ));
     in
       mapAttrs
-      (_: opts: mkOverlayFromDir opts.folder opts.args)
+      (
+        _: opts:
+          lib.modules.when (pathExists opts.folder)
+          (mkOverlayFromDir opts.folder opts.args)
+      )
       config.generators.overlays;
   };
 }

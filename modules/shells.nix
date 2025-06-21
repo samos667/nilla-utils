@@ -29,6 +29,16 @@ in {
   };
 
   config = {
+    assertions = let
+      folder = config.generators.shells.folder;
+    in
+      lib.lists.when config.generators.assertPaths [
+        {
+          assertion = folder == null || (folder != null && pathExists folder);
+          message = "Shells generator's configured folder \"${toString folder}\" does not exist.";
+        }
+      ];
+
     shells =
       lib.modules.when
       (config.generators.shells.folder != null && pathExists config.generators.shells.folder)
