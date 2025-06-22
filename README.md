@@ -24,6 +24,8 @@
   - [Overlays](#overlays)
   - [NixOS](#nixos-2)
   - [Home Manager](#home-manager-2)
+  - [NixOS Modules](#nixos-modules)
+  - [Home Manager Modules](#home-manager-modules)
 - [Examples](#examples)
 
 ## Quickstart
@@ -303,7 +305,9 @@ in nilla.create ({config}: {
     # - generators.shells.folder = "./shells";
     # - generators.overlays.default.folder = "./packages";
     # - generators.nixos.folder = "./hosts";
+    # - generators.nixosModules.folder = "./modules/nixos";
     # - generators.home.folder = "./hosts";
+    # - generators.homeModules.folder = "./modules/home";
     generators.project.folder = ./.;
 
     # ...
@@ -503,6 +507,112 @@ in nilla.create ({config}: {
 
           # ...
         }
+      ];
+    };
+
+    # ...
+  };
+})
+```
+
+### NixOS Modules
+
+The `nixosModules` generator will expose NixOS modules found in a specified folder under `config.modules.nixos.<name>`. This is useful for organizing reusable NixOS configuration snippets.
+
+Given the following structure:
+
+```
+.
+├── modules
+│   └── nixos
+│       ├── my-module
+│       │   └── default.nix
+│       └── common
+│           └── default.nix
+└── nilla.nix
+```
+
+And the following `nilla.nix` will expose `my-module` and `common` as NixOS modules:
+
+```nix
+# nilla.nix
+let
+  pins = import ./npins;
+
+  nilla = import pins.nilla;
+in nilla.create ({config}: {
+  includes = [
+    "${pins.nilla-utils}/modules"
+  ];
+
+  config = {
+    generators.nixosModules.folder = ./modules/nixos;
+
+    systems.nixos.mysystem = {
+      modules = [
+        # You can now import modules directly from here
+        config.modules.nixos.my-module
+        config.modules.nixos.common
+        # Or, within a module, use the automatically passed `nixosModules` argument:
+        # ({nixosModules, ...}: {
+        #   imports = [
+        #     nixosModules.my-module
+        #     nixosModules.common
+        #   ];
+        # })
+      ];
+    };
+
+    # ...
+  };
+})
+```
+
+### Home Manager Modules
+
+The `homeModules` generator will expose Home Manager modules found in a specified folder under `config.modules.home.<name>`. This is useful for organizing reusable Home Manager configuration snippets.
+
+Given the following structure:
+
+```
+.
+├── modules
+│   └── home
+│       ├── my-module
+│       │   └── default.nix
+│       └── common
+│           └── default.nix
+└── nilla.nix
+```
+
+And the following `nilla.nix` will expose `my-module` and `common` as Home Manager modules:
+
+```nix
+# nilla.nix
+let
+  pins = import ./npins;
+
+  nilla = import pins.nilla;
+in nilla.create ({config}: {
+  includes = [
+    "${pins.nilla-utils}/modules"
+  ];
+
+  config = {
+    generators.homeModules.folder = ./modules/home;
+
+    systems.home."user@system1" = {
+      modules = [
+        # You can now import modules directly from here
+        config.modules.home.my-module
+        config.modules.home.common
+        # Or, within a module, use the automatically passed `homeModules` argument:
+        # ({homeModules, ...}: {
+        #   imports = [
+        #     homeModules.my-module
+        #     homeModules.common
+        #   ];
+        # })
       ];
     };
 
