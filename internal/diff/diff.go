@@ -2,7 +2,6 @@ package diff
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
@@ -13,6 +12,7 @@ import (
 	"github.com/arnarg/nilla-utils/internal/util"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/s0rg/set"
+	"github.com/valyala/fastjson"
 )
 
 type Package struct {
@@ -309,18 +309,50 @@ func getClosureSize(executor exec.Executor, path string) (int64, error) {
 	}
 
 	// Parse path-info output
-	info := []struct {
-		ClosureSize int64 `json:"closureSize"`
-	}{}
-	if err := json.Unmarshal(buf.Bytes(), &info); err != nil {
+	size, err := decodeClosureSize(buf.Bytes())
+	if err != nil {
 		return 0, err
 	}
 
-	if len(info) < 1 {
-		return 0, nil
+	return size, nil
+}
+
+func decodeClosureSize(buf []byte) (int64, error) {
+	val, err := fastjson.ParseBytes(buf)
+	if err != nil {
+		return 0, err
 	}
 
-	return info[0].ClosureSize, nil
+	// Depending on nix or lix, it's sometimes a list
+	// of objects and sometimes an object with generation
+	// as key
+	switch val.Type() {
+	case fastjson.TypeArray:
+		arr := val.GetArray()
+
+		if len(arr) < 1 {
+			return 0, nil
+		}
+
+		return arr[0].GetInt64("closureSize"), nil
+
+	case fastjson.TypeObject:
+		obj := val.GetObject()
+
+		key := ""
+		obj.Visit(func(k []byte, v *fastjson.Value) {
+			key = string(k)
+		})
+
+		gen := obj.Get(key)
+		if gen == nil {
+			return 0, nil
+		}
+
+		return gen.GetInt64("closureSize"), nil
+	}
+
+	return 0, nil
 }
 
 func Print(diff *Diff) {
