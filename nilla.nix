@@ -29,7 +29,7 @@ in
         builder = "nixpkgs";
         settings.pkgs = config.inputs.nixpkgs.result;
 
-        package = import ./default.nix;
+        package = import ./package.nix;
       };
 
       shells.default = {

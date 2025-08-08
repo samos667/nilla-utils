@@ -31,7 +31,7 @@ Located in the `modules/` directory (Docs 32-39), these Nix files provide the de
 
 ### 2.2. CLI Plugins (`nilla-os` and `nilla-home`)
 
-These are Go applications (built by `default.nix`, Doc 3) that act as plugins for the `nilla` CLI, providing subcommands like `nilla os ...` and `nilla home ...`.
+These are Go applications (built by `package.nix`, Doc 3) that act as plugins for the `nilla` CLI, providing subcommands like `nilla os ...` and `nilla home ...`.
 
 *   **Purpose**: To offer a user-friendly interface for managing the lifecycle of NixOS and Home Manager systems defined within a Nilla project.
 *   **Source Code**: Located in `cmd/nilla-os/` (Docs 10, 11) and `cmd/nilla-home/` (Docs 8, 9).
@@ -164,7 +164,7 @@ These modules are the declarative backbone, defining how Nilla understands and m
 ## 4. Build and Packaging
 
 *   **CLI Plugins**:
-    *   The Go applications (`nilla-os`, `nilla-home`) are built using `buildGoApplication` from Nixpkgs (as seen in `nilla-utils/default.nix`, Doc 3).
+    *   The Go applications (`nilla-os`, `nilla-home`) are built using `buildGoApplication` from Nixpkgs (as seen in `nilla-utils/package.nix`, Doc 3).
     *   Go module dependencies are managed by `go.mod` (Doc 4) and `go.sum` (Doc 5), and translated to Nix derivations via `gomod2nix` (using `gomod2nix.toml`, Doc 6).
     *   The `nilla-utils` project itself has a `nilla.nix` (Doc 7) that defines a `packages.nilla-utils-plugins` output, which builds these Go CLIs.
 *   **Nilla Modules**: Being Nix code, they are directly imported by user's Nilla configurations.
@@ -197,7 +197,7 @@ These modules are the declarative backbone, defining how Nilla understands and m
     *   `util/` (Docs 20, 21): General utility functions.
 *   `modules/` (Docs 32-39): Nilla modules (Nix files).
 *   `examples/` (Docs 42-46): Example Nilla configurations demonstrating `nilla-utils` features.
-*   `default.nix` (Doc 3): Top-level Nix file for building the Go CLI plugins as a Nix package.
+*   `package.nix` (Doc 3): Top-level Nix file for building the Go CLI plugins as a Nix package.
 *   `nilla.nix` (Doc 7): Nilla project file for `nilla-utils` itself.
 *   `go.mod` (Doc 4), `go.sum` (Doc 5), `gomod2nix.toml` (Doc 6): Go dependency and Nix build information.
 *   `npins/` (Docs 40, 41): Npins managed Nix dependencies.
